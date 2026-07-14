@@ -18,6 +18,23 @@ export type AnalyzeResult =
   | { ok: true; data: MealAnalysis }
   | { ok: false; error: string }
 
+export type BloodSugarReading = {
+  id: string
+  value: number // mg/dL
+  timestamp: string // ISO string
+  note: string
+}
+
+export type GlucoseInsight = {
+  trend_summary: string
+  tips: string[]
+  concern_level: "Good" | "Caution" | "Elevated"
+}
+
+export type GlucoseInsightResult =
+  | { ok: true; data: GlucoseInsight }
+  | { ok: false; error: string }
+
 const SYSTEM_INSTRUCTION = `You are a clinical diabetes tracking assistant used inside a medical-grade nutrition app.
 Analyze the provided meal (from a text description and/or a food image) and estimate its nutritional content
 with a focus on blood-glucose impact for people managing diabetes.
@@ -38,6 +55,93 @@ prose before or after. The JSON MUST match this exact schema and types:
 }
 
 If you cannot identify the food, make your best reasonable estimate rather than refusing.`
+
+const GLUCOSE_SYSTEM_INSTRUCTION = `You are a clinical diabetes educator assistant inside a nutrition tracking app.
+A user has logged their blood sugar readings alongside meals they ate. Analyze the combined data
+and provide personalized, actionable insights.
+
+Respond with ONLY a single valid, raw JSON object. Do NOT wrap it in markdown code fences. The JSON MUST match this exact schema:
+
+{
+  "trend_summary": string,       // 1-2 sentences summarizing the overall glucose trend
+  "tips": string[],              // 2-4 actionable, specific tips based on the data
+  "concern_level": "Good" | "Caution" | "Elevated"   // overall assessment
+}
+
+Tips should reference specific meals or readings when relevant. Be encouraging and practical.
+Normal fasting range: 70-100 mg/dL. Normal post-meal (2hr): <140 mg/dL.
+Elevated post-meal: 140-180 mg/dL. High: >180 mg/dL.`
+
+export async function getGlucoseInsightAction(
+  readings: { value: number; time: string; note: string }[],
+  recentMeals: { name: string; time: string; carbs_g: number; glycemic_load: string }[],
+): Promise<GlucoseInsightResult> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    return { ok: false, error: "Server is missing GEMINI_API_KEY." }
+  }
+
+  if (readings.length === 0) {
+    return { ok: false, error: "No blood sugar readings to analyze." }
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey })
+
+    const readingsSummary = readings
+      .map((r) => `${r.time} — ${r.value} mg/dL${r.note ? ` (${r.note})` : ""}`)
+      .join("\n")
+
+    const mealsSummary = recentMeals
+      .map((m) => `${m.time} — ${m.name} (${m.carbs_g}g carbs, glycemic load: ${m.glycemic_load})`)
+      .join("\n")
+
+    const prompt = `Here is the user's blood sugar data for today:
+
+Blood Sugar Readings:
+${readingsSummary || "No readings logged yet."}
+
+Meals Consumed:
+${mealsSummary || "No meals logged."}
+
+Provide personalized diabetes management insights based on this data.`
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      config: {
+        systemInstruction: GLUCOSE_SYSTEM_INSTRUCTION,
+        responseMimeType: "application/json",
+        temperature: 0.4,
+      },
+    })
+
+    const raw = response.text ?? ""
+    if (!raw) {
+      return { ok: false, error: "AI returned an empty response." }
+    }
+
+    let parsed: GlucoseInsight
+    try {
+      parsed = JSON.parse(stripToJson(raw)) as GlucoseInsight
+    } catch {
+      return { ok: false, error: "Could not parse the AI response." }
+    }
+
+    const data: GlucoseInsight = {
+      trend_summary: String(parsed.trend_summary ?? ""),
+      tips: Array.isArray(parsed.tips) ? parsed.tips.filter(Boolean) : [],
+      concern_level: (["Good", "Caution", "Elevated"].includes(parsed.concern_level)
+        ? parsed.concern_level
+        : "Good") as GlucoseInsight["concern_level"],
+    }
+
+    return { ok: true, data }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error."
+    return { ok: false, error: message }
+  }
+}
 
 function stripToJson(text: string): string {
   let t = text.trim()
