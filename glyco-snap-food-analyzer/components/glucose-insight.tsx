@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef, type JSX } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Brain, Lightbulb, Loader2, Sparkles } from "lucide-react"
 import { getGlucoseInsightAction, type GlucoseInsight, type BloodSugarReading } from "@/app/actions"
 import type { LoggedMeal } from "@/components/history-log"
