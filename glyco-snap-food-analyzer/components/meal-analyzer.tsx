@@ -18,7 +18,8 @@ export function MealAnalyzer({
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function isHeic(file: File): boolean {
+  // Quick client-side check before importing the heavy WASM library
+  function looksLikeHeic(file: File): boolean {
     return (
       /\.hei[cf]$/i.test(file.name) ||
       file.type === "image/heic" ||
@@ -30,7 +31,7 @@ export function MealAnalyzer({
     setFile(selected)
     setConversionFailed(false)
     if (preview) URL.revokeObjectURL(preview)
-    if (selected && !isHeic(selected)) {
+    if (selected && !looksLikeHeic(selected)) {
       setPreview(URL.createObjectURL(selected))
     } else {
       setPreview(null)
@@ -52,22 +53,21 @@ export function MealAnalyzer({
     if (preview) URL.revokeObjectURL(preview)
     setPreview(null)
 
-    if (!isHeic(selected)) {
-      // JPEG/PNG – show preview directly
+    // Quick check — if it doesn't look like HEIC, show preview directly
+    if (!looksLikeHeic(selected)) {
       setPreview(URL.createObjectURL(selected))
       return
     }
 
-    // HEIC – try converting for preview only (Gemini gets the original file)
+    // HEIC — convert for preview only (Gemini gets the original file)
     setConverting(true)
     try {
-      const heic2any = (await import("heic2any")).default
-      const converted = await heic2any({ blob: selected, toType: "image/jpeg", quality: 0.85 })
-      const jpegBlob = Array.isArray(converted) ? converted[0] : converted
+      const { heicTo } = await import("heic-to")
+      const jpegBlob = await heicTo({ blob: selected, type: "image/jpeg", quality: 0.85 })
       setPreview(URL.createObjectURL(jpegBlob))
     } catch {
-      // Preview conversion failed – that's OK, show a placeholder.
-      // The original HEIC still gets sent to Gemini, which supports it.
+      // Preview conversion failed — show a placeholder.
+      // The original HEIC still gets sent to Gemini, which supports it natively.
       setConversionFailed(true)
     } finally {
       setConverting(false)
