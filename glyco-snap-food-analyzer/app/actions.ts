@@ -121,7 +121,7 @@ function stripToJson(text: string): string {
 
 export async function analyzeMealAction(payload: {
   description?: string
-  imageBase64?: string
+  imageUrl?: string
   imageMimeType?: string
 }): Promise<AnalyzeResult> {
   const apiKey = process.env.GEMINI_API_KEY
@@ -133,7 +133,7 @@ export async function analyzeMealAction(payload: {
   }
 
   const description = payload.description?.trim() ?? ""
-  const hasImage = !!payload.imageBase64
+  const hasImage = !!payload.imageUrl
 
   if (!description && !hasImage) {
     return { ok: false, error: "Please provide a meal description or upload a photo." }
@@ -151,10 +151,18 @@ export async function analyzeMealAction(payload: {
     }
 
     if (hasImage) {
+      // Download the image from Vercel Blob and convert to base64 for Gemini
+      const imageResp = await fetch(payload.imageUrl!)
+      if (!imageResp.ok) {
+        return { ok: false, error: "Failed to fetch uploaded image." }
+      }
+      const imageBuffer = Buffer.from(await imageResp.arrayBuffer())
+      const base64 = imageBuffer.toString("base64")
+
       parts.push({
         inlineData: {
           mimeType: payload.imageMimeType || "image/jpeg",
-          data: payload.imageBase64!,
+          data: base64,
         },
       })
     }

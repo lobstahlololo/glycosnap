@@ -1,7 +1,8 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, ImagePlus, Loader2, X, FileImage } from "lucide-react"
+import { ArrowRight, ImagePlus, Loader2, X, FileImage, Upload } from "lucide-react"
+import { upload } from "@vercel/blob/client"
 import { analyzeMealAction, type MealAnalysis } from "@/app/actions"
 
 /** Check if a file looks like HEIC/HEIF (no conversion needed — Gemini supports it natively) */
@@ -23,6 +24,7 @@ export function MealAnalyzer({
   const [preview, setPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isHeicFile, setIsHeicFile] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -31,6 +33,7 @@ export function MealAnalyzer({
     setError(null)
     setPreview(null)
     setIsHeicFile(false)
+    setUploadProgress(0)
 
     if (!selected) {
       setFile(null)
@@ -40,7 +43,7 @@ export function MealAnalyzer({
     setFile(selected)
 
     if (isHeic(selected)) {
-      // Gemini supports HEIC natively — just show a placeholder, no conversion needed
+      // Gemini supports HEIC natively — show a placeholder
       setIsHeicFile(true)
     } else {
       setPreview(URL.createObjectURL(selected))
@@ -62,30 +65,30 @@ export function MealAnalyzer({
       return
     }
 
-    // Build payload — read image as base64 on the client to avoid File serialization issues
-    const payload: { description?: string; imageBase64?: string; imageMimeType?: string } = {}
-    if (hasText) payload.description = description.trim()
-    if (file) {
-      try {
-        const buf = await file.arrayBuffer()
-        const bytes = new Uint8Array(buf)
-        let binary = ""
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i])
-        }
-        payload.imageBase64 = btoa(binary)
-        // Resolve MIME type: trust the browser, fall back to extension detection
-        payload.imageMimeType =
-          file.type ||
-          (isHeic(file) ? "image/heic" : "image/jpeg")
-      } catch {
-        setError("Could not read the selected image file.")
-        return
-      }
-    }
-
     setLoading(true)
+    setUploadProgress(0)
+
     try {
+      // Build payload that will be sent to the server action
+      const payload: { description?: string; imageUrl?: string; imageMimeType?: string } = {}
+      if (hasText) payload.description = description.trim()
+
+      // Upload to Vercel Blob directly from the client (bypasses server payload limits)
+      if (file) {
+        const { url } = await upload(file.name, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload",
+          onUploadProgress: (progress) => {
+            setUploadProgress(Math.round(progress.percentage ?? 0))
+          },
+        })
+
+        payload.imageUrl = url
+        payload.imageMimeType =
+          file.type || (isHeic(file) ? "image/heic" : "image/jpeg")
+      }
+
+      // Send the Blob URL (not the raw file) to the server action
       const result = await analyzeMealAction(payload)
       if (result.ok) {
         onAnalyzed(result.data)
@@ -94,12 +97,15 @@ export function MealAnalyzer({
       } else {
         setError(result.error)
       }
-    } catch {
-      setError("Something went wrong. Please try again.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     } finally {
       setLoading(false)
+      setUploadProgress(0)
     }
   }
+
+  const showProgress = loading && file && uploadProgress > 0 && uploadProgress < 100
 
   return (
     <form
@@ -174,6 +180,24 @@ export function MealAnalyzer({
         )}
       </div>
 
+      {/* Upload progress bar */}
+      {showProgress && (
+        <div className="mt-3">
+          <div className="flex items-center gap-2">
+            <Upload className="h-4 w-4 text-primary animate-pulse" />
+            <span className="text-xs font-medium text-foreground">
+              Uploading to cloud… {uploadProgress}%
+            </span>
+          </div>
+          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">
           {error}
@@ -188,7 +212,9 @@ export function MealAnalyzer({
         {loading ? (
           <>
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            Simmering the numbers...
+            {uploadProgress > 0 && uploadProgress < 100
+              ? `Uploading ${uploadProgress}%…`
+              : "Analyzing meal…"}
           </>
         ) : (
           <>
