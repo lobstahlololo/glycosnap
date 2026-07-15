@@ -9,6 +9,18 @@ export function ResultCard({ data }: { data: MealAnalysis }) {
       aria-live="polite"
       className="rounded-3xl border border-border bg-card p-6 shadow-[0_8px_30px_-12px_rgba(120,80,50,0.18)]"
     >
+      {/* Image preview — Cloudinary converts HEIC to JPEG for browser viewing */}
+      {data.preview_image_url ? (
+        <div className="mb-5 overflow-hidden rounded-2xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={data.preview_image_url}
+            alt={data.meal_name}
+            className="max-h-64 w-full object-cover"
+          />
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Latest analysis</p>

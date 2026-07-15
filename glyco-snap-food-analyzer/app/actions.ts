@@ -10,6 +10,10 @@ export type MealAnalysis = {
   clinical_note: string
   brand_or_restaurant: string
   suggested_google_search_query: string
+  /** Public Vercel Blob URL of the uploaded image */
+  image_url?: string
+  /** Cloudinary fetch URL that renders the image as JPEG (supports HEIC) */
+  preview_image_url?: string
 }
 
 export type AnalyzeResult =
@@ -32,6 +36,8 @@ export type GlucoseInsight = {
 export type GlucoseInsightResult =
   | { ok: true; data: GlucoseInsight }
   | { ok: false; error: string }
+
+import { getCloudinaryPreviewUrl } from "@/lib/cloudinary"
 
 const MEAL_SYSTEM_INSTRUCTION = `You are a clinical diabetes tracking assistant used inside a medical-grade nutrition app.
 Analyze the provided meal (from a text description and/or a food image) and estimate its nutritional content
@@ -180,6 +186,8 @@ export async function analyzeMealAction(payload: {
       return { ok: false, error: "Could not parse the AI response. Please try again." }
     }
 
+    const previewUrl = payload.imageUrl ? getCloudinaryPreviewUrl(payload.imageUrl) : undefined
+
     const data: MealAnalysis = {
       meal_name: String(parsed.meal_name ?? "Unknown meal"),
       total_calories: Number(parsed.total_calories) || 0,
@@ -192,6 +200,8 @@ export async function analyzeMealAction(payload: {
       clinical_note: String(parsed.clinical_note ?? ""),
       brand_or_restaurant: String(parsed.brand_or_restaurant ?? "").trim(),
       suggested_google_search_query: String(parsed.suggested_google_search_query ?? "").trim(),
+      image_url: payload.imageUrl,
+      preview_image_url: previewUrl,
     }
 
     return { ok: true, data }
