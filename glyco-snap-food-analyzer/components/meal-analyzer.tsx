@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, ImagePlus, Loader2, X } from "lucide-react"
+import { ArrowRight, ImagePlus, Loader2, X, FileImage } from "lucide-react"
 import { analyzeMealAction, type MealAnalysis } from "@/app/actions"
 
 export function MealAnalyzer({
@@ -14,50 +14,64 @@ export function MealAnalyzer({
   const [preview, setPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [converting, setConverting] = useState(false)
+  const [conversionFailed, setConversionFailed] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function setFilePreview(selected: File | null) {
+  function isHeic(file: File): boolean {
+    return (
+      /\.hei[cf]$/i.test(file.name) ||
+      file.type === "image/heic" ||
+      file.type === "image/heif"
+    )
+  }
+
+  function setFileState(selected: File | null) {
     setFile(selected)
+    setConversionFailed(false)
     if (preview) URL.revokeObjectURL(preview)
-    setPreview(selected ? URL.createObjectURL(selected) : null)
+    if (selected && !isHeic(selected)) {
+      setPreview(URL.createObjectURL(selected))
+    } else {
+      setPreview(null)
+    }
   }
 
   async function handleFile(selected: File | null) {
     if (!selected) {
-      setFilePreview(null)
+      setFileState(null)
       return
     }
 
-    const isHeic =
-      /\.hei[cf]$/i.test(selected.name) ||
-      selected.type === "image/heic" ||
-      selected.type === "image/heif"
+    // Store the original file regardless (Gemini supports HEIC natively).
+    setFile(selected)
+    setConversionFailed(false)
+    setError(null)
 
-    if (isHeic) {
-      setError(null)
-      setConverting(true)
-      try {
-        const heic2any = (await import("heic2any")).default
-        const converted = await heic2any({ blob: selected, toType: "image/jpeg", quality: 0.9 })
-        const jpegBlob = Array.isArray(converted) ? converted[0] : converted
-        const jpegFile = new File(
-          [jpegBlob],
-          selected.name.replace(/\.hei[cf]$/i, ".jpg"),
-          { type: "image/jpeg" },
-        )
-        setFilePreview(jpegFile)
-      } catch {
-        setError("Couldn't convert that HEIC image. Try a JPG or PNG instead.")
-        setFilePreview(null)
-        if (inputRef.current) inputRef.current.value = ""
-      } finally {
-        setConverting(false)
-      }
+    // Revoke old preview
+    if (preview) URL.revokeObjectURL(preview)
+    setPreview(null)
+
+    if (!isHeic(selected)) {
+      // JPEG/PNG – show preview directly
+      setPreview(URL.createObjectURL(selected))
       return
     }
 
-    setFilePreview(selected)
+    // HEIC – try converting for preview only (Gemini gets the original file)
+    setConverting(true)
+    try {
+      const heic2any = (await import("heic2any")).default
+      const converted = await heic2any({ blob: selected, toType: "image/jpeg", quality: 0.85 })
+      const jpegBlob = Array.isArray(converted) ? converted[0] : converted
+      setPreview(URL.createObjectURL(jpegBlob))
+    } catch {
+      // Preview conversion failed – that's OK, show a placeholder.
+      // The original HEIC still gets sent to Gemini, which supports it.
+      setConversionFailed(true)
+    } finally {
+      setConverting(false)
+    }
   }
 
   function clearImage() {
@@ -126,7 +140,31 @@ export function MealAnalyzer({
           id="meal-image"
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
         />
-        {preview ? (
+        {converting ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-9 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+            <span className="text-sm font-medium text-foreground">Preparing photo...</span>
+            <span className="text-xs text-muted-foreground">Hang tight, this only takes a moment</span>
+          </div>
+        ) : conversionFailed ? (
+          <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border bg-background">
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-9 text-center">
+              <FileImage className="h-8 w-8 text-primary" aria-hidden="true" />
+              <span className="text-sm font-medium text-foreground">{file?.name}</span>
+              <span className="text-xs text-muted-foreground">
+                HEIC photo selected — preview unavailable on this device
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={clearImage}
+              className="absolute right-2 top-2 rounded-full bg-foreground/70 p-1.5 text-background transition hover:bg-foreground"
+              aria-label="Remove image"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : preview ? (
           <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={preview} alt="Selected meal preview" className="max-h-64 w-full object-cover" />
@@ -138,12 +176,6 @@ export function MealAnalyzer({
             >
               <X className="h-4 w-4" />
             </button>
-          </div>
-        ) : converting ? (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-9 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-            <span className="text-sm font-medium text-foreground">Converting HEIC photo...</span>
-            <span className="text-xs text-muted-foreground">Hang tight, this only takes a moment</span>
           </div>
         ) : (
           <label
