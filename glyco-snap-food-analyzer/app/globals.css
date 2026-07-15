@@ -154,8 +154,6 @@
     --chart-5: oklch(0.7 0.1 30);
     --sidebar: oklch(0.29 0.016 52);
     --sidebar-foreground: oklch(0.93 0.014 80);
-    --sidebar-primary: oklch(0.66 0.12 44);
-    --sidebar-primary-foreground: oklch(0.22 0.02 50);
     --sidebar-accent: oklch(0.4 0.05 150);
     --sidebar-accent-foreground: oklch(0.92 0.03 145);
     --sidebar-border: oklch(0.86 0.02 72 / 14%);
@@ -186,5 +184,69 @@
     background:
       linear-gradient(to right, var(--border), var(--border)) top/100% 1px no-repeat,
       linear-gradient(to right, var(--border), var(--border)) bottom/100% 1px no-repeat;
+  }
+}
+
+/* ===========================================================================
+   Doctor Report — Print stylesheet
+   When the user triggers window.print() from ReportModal, hide the rest of
+   the app and re-format the report card onto a clean A4-shaped surface.
+   =========================================================================== */
+@media print {
+  /* Reset page chrome */
+  body {
+    background: white !important;
+    color: black !important;
+    background-image: none !important;
+  }
+
+  /* Hide everything except the open modal */
+  body > *:not(.report-modal-shell) {
+    display: none !important;
+  }
+
+  /* The modal shell becomes the full page in print */
+  .report-modal-shell {
+    position: static !important;
+    background: white !important;
+    padding: 0 !important;
+    backdrop-filter: none !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .report-modal-card {
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Force black-on-white text inside the report */
+  .report-modal-card * {
+    color: black !important;
+    background: transparent !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Friendly A4 sizing */
+  @page {
+    size: A4;
+    margin: 14mm 14mm 14mm 14mm;
+  }
+
+  /* Avoid awkward page splits inside key blocks */
+  .report-modal-card header,
+  .report-modal-card section,
+  .report-modal-card footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Hide any sticky or "screen only" elements within a report-modal-shell */
+  .report-modal-card .sticky {
+    position: static !important;
   }
 }

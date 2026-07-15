@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { UtensilsCrossed, HeartPulse } from "lucide-react"
 import type { MealAnalysis, BloodSugarReading } from "@/app/actions"
 import { MealAnalyzer } from "@/components/meal-analyzer"
@@ -9,33 +9,179 @@ import { HistoryLog, type LoggedMeal } from "@/components/history-log"
 import { BloodSugarInput } from "@/components/blood-sugar-input"
 import { BloodSugarChart } from "@/components/blood-sugar-chart"
 import { GlucoseInsightSection } from "@/components/glucose-insight"
+import { A1cCard } from "@/components/a1c-card"
+import { DeviceSync } from "@/components/device-sync"
+import { BadgeShelf } from "@/components/badge-shelf"
+import { ReportModal } from "@/components/report-modal"
+import {
+  DashboardBar,
+  DEFAULT_STATE,
+  loadPersistedState,
+  persistState,
+  type PersistedState,
+} from "@/components/dashboard-bar"
+import { computeStreak, pointsForLog, unlockedBadgeIds } from "@/lib/gamification"
+
+/**
+ * Stored as a separate key from profile/gamification so that the latter
+ * can be migrated independently of the user's log history.
+ */
+const LOGS_STORAGE_KEY = "glycosnap_logs_v1"
+
+type LogsState = {
+  meals: LoggedMeal[]
+  readings: BloodSugarReading[]
+}
+
+function loadLogs(): LogsState {
+  if (typeof window === "undefined") return { meals: [], readings: [] }
+  try {
+    const raw = localStorage.getItem(LOGS_STORAGE_KEY)
+    if (!raw) return { meals: [], readings: [] }
+    const parsed = JSON.parse(raw)
+    return {
+      meals: Array.isArray(parsed?.meals) ? parsed.meals : [],
+      readings: Array.isArray(parsed?.readings) ? parsed.readings : [],
+    }
+  } catch {
+    return { meals: [], readings: [] }
+  }
+}
+
+function saveLogs(logs: LogsState) {
+  try {
+    localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(logs))
+  } catch {}
+}
+
+type ActiveModal = "none" | "badges" | "report"
 
 export default function Page() {
-  const [latest, setLatest] = useState<MealAnalysis | null>(null)
-  const [history, setHistory] = useState<LoggedMeal[]>([])
-  const [bloodSugarReadings, setBloodSugarReadings] = useState<BloodSugarReading[]>([])
+  const [isMounted, setIsMounted] = useState(false)
+  const [persisted, setPersisted] = useState<PersistedState>(DEFAULT_STATE)
+  const [logs, setLogs] = useState<LogsState>({ meals: [], readings: [] })
+  const [activeModal, setActiveModal] = useState<ActiveModal>("none")
 
-  function handleAnalyzed(data: MealAnalysis) {
-    setLatest(data)
-    setHistory((prev) => [
-      {
-        ...data,
-        id: crypto.randomUUID(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-      ...prev,
-    ])
-  }
-
-  const handleBloodSugarAdd = useCallback((reading: BloodSugarReading) => {
-    setBloodSugarReadings((prev) =>
-      [reading, ...prev].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-      ),
-    )
+  // Hydrate exactly once on mount (avoids React 19 SSR hydration mismatches)
+  useEffect(() => {
+    setPersisted(loadPersistedState())
+    setLogs(loadLogs())
+    setIsMounted(true)
   }, [])
 
-  const hasAnyBloodSugar = bloodSugarReadings.length > 0
+  // Persist profile/gamification whenever _and only after_ mounted
+  useEffect(() => {
+    if (isMounted) persistState(persisted)
+  }, [persisted, isMounted])
+
+  // Persist meal/reading logs
+  useEffect(() => {
+    if (isMounted) saveLogs(logs)
+  }, [logs, isMounted])
+
+  /**
+   * Apply gamification *synchronously* against the post-update log arrays.
+   * This runs once per user-initiated event — including bulk CSV import —
+   * so 5,000 imported readings still produce a single badge evaluation.
+   */
+  const advanceGamification = useCallback(
+    (kind: "meal" | "reading" | "csv", count: number, newLogs: LogsState): Partial<PersistedState> => {
+      const pointsDelta = pointsForLog(kind === "csv" ? "reading" : kind) * count
+      const streak = computeStreak(newLogs.readings.map((r) => r.timestamp))
+      const newState: PersistedState = persisted
+      const ctx = {
+        readings: newLogs.readings,
+        meals: newLogs.meals.length,
+        streak,
+        diabetesType: newState.profile.diabetesType,
+      }
+      return {
+        gamification: {
+          points: newState.gamification.points + pointsDelta,
+          unlockedBadges: unlockedBadgeIds(ctx),
+        },
+      }
+    },
+    [persisted],
+  )
+
+  const handleAnalyzed = useCallback(
+    (data: MealAnalysis) => {
+      setLogs((prev) => {
+        const newMeal: LoggedMeal = {
+          ...data,
+          id: crypto.randomUUID(),
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        }
+        const next: LogsState = {
+          readings: prev.readings,
+          meals: [newMeal, ...prev.meals],
+        }
+        setPersisted((p) => ({ ...p, ...advanceGamification("meal", 1, next) }))
+        return next
+      })
+    },
+    [advanceGamification],
+  )
+
+  const handleBloodSugarAdd = useCallback(
+    (reading: BloodSugarReading) => {
+      setLogs((prev) => {
+        const nextReadings = [reading, ...prev.readings].sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        )
+        const next: LogsState = { meals: prev.meals, readings: nextReadings }
+        setPersisted((p) => ({ ...p, ...advanceGamification("reading", 1, next) }))
+        return next
+      })
+    },
+    [advanceGamification],
+  )
+
+  const handleCsvImport = useCallback(
+    (importedReadings: BloodSugarReading[]) => {
+      setLogs((prev) => {
+        // De-dupe by timestamp+value, sort newest-first, then evaluate once.
+        const seen = new Set<string>()
+        const merged: BloodSugarReading[] = []
+        for (const r of [...importedReadings, ...prev.readings]) {
+          const key = `${r.timestamp}|${r.value}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            merged.push(r)
+          }
+        }
+        const nextReadings = merged.sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        )
+        const next: LogsState = { meals: prev.meals, readings: nextReadings }
+        setPersisted((p) => ({
+          ...p,
+          ...advanceGamification("csv", importedReadings.length, next),
+        }))
+        return next
+      })
+    },
+    [advanceGamification],
+  )
+
+  const latest = logs.meals[0] ?? null
+  const hasAnyBloodSugar = logs.readings.length > 0
+  const diabetesType = persisted.profile.diabetesType
+
+  const activeUnlockedBadges = useMemo(
+    () => persisted.gamification.unlockedBadges,
+    [persisted.gamification.unlockedBadges],
+  )
+
+  // Don't render until we've hydrated from localStorage to avoid React 19
+  // hydration mismatches (profile-specific UI vs. SSR-rendered default UI).
+  if (!isMounted) return null
 
   return (
     <main className="min-h-screen">
@@ -55,7 +201,14 @@ export default function Page() {
         </div>
       </header>
 
-      {/* Meal analysis — two-column grid (same as original) */}
+      <DashboardBar
+        state={persisted}
+        onChange={setPersisted}
+        onOpenReport={() => setActiveModal("report")}
+        onOpenBadges={() => setActiveModal("badges")}
+      />
+
+      {/* Meal analysis — two-column grid (original) */}
       <div className="mx-auto grid max-w-5xl gap-8 px-4 py-10 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <div>
@@ -88,8 +241,13 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Blood sugar tracker section */}
+      {/* Estimated A1c + Time-in-Range snapshot */}
       <div className="mx-auto max-w-5xl px-4 pb-8">
+        <A1cCard readings={logs.readings} diabetesType={diabetesType} />
+      </div>
+
+      {/* Glucose Tracking section */}
+      <div className="mx-auto max-w-5xl px-4 pb-4">
         <div className="flex items-center gap-3">
           <hr className="flex-1 recipe-rule" />
           <span className="flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -103,7 +261,7 @@ export default function Page() {
       <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-8 lg:grid-cols-2">
         <BloodSugarInput onAdd={handleBloodSugarAdd} />
         {hasAnyBloodSugar ? (
-          <BloodSugarChart readings={bloodSugarReadings} meals={history} />
+          <BloodSugarChart readings={logs.readings} meals={logs.meals} />
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/50 p-10 text-center">
             <HeartPulse className="h-8 w-8 text-primary/40" aria-hidden="true" />
@@ -114,10 +272,14 @@ export default function Page() {
         )}
       </div>
 
+      {/* Device sync */}
+      <div className="mx-auto max-w-5xl px-4 pb-8">
+        <DeviceSync onImport={handleCsvImport} />
+      </div>
+
       {/* Recent readings + AI insights */}
       {hasAnyBloodSugar && (
         <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-8 lg:grid-cols-2">
-          {/* Recent readings list */}
           <div className="rounded-3xl border border-border bg-card p-6 shadow-[0_8px_30px_-12px_rgba(120,80,50,0.18)]">
             <div className="flex items-center justify-between gap-3">
               <h3 className="flex items-center gap-2 font-serif text-xl font-semibold text-card-foreground">
@@ -127,13 +289,13 @@ export default function Page() {
               <p className="text-xs text-muted-foreground">
                 Latest:{" "}
                 <span className="font-semibold tabular-nums text-foreground">
-                  {Math.round(bloodSugarReadings[0].value)}
+                  {Math.round(logs.readings[0].value)}
                 </span>{" "}
                 mg/dL
               </p>
             </div>
             <ul className="mt-4 flex flex-col gap-2">
-              {bloodSugarReadings.slice(0, 6).map((r) => (
+              {logs.readings.slice(0, 6).map((r) => (
                 <li
                   key={r.id}
                   className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background px-4 py-2.5"
@@ -170,14 +332,17 @@ export default function Page() {
             </ul>
           </div>
 
-          {/* AI insights */}
-          <GlucoseInsightSection readings={bloodSugarReadings} meals={history} mealCount={history.length} />
+          <GlucoseInsightSection
+            readings={logs.readings}
+            meals={logs.meals}
+            mealCount={logs.meals.length}
+          />
         </div>
       )}
 
       {/* History log */}
       <div className="mx-auto max-w-5xl px-4 pb-12">
-        <HistoryLog meals={history} />
+        <HistoryLog meals={logs.meals} />
       </div>
 
       <footer className="mx-auto max-w-5xl px-4 pb-10 text-center">
@@ -186,6 +351,23 @@ export default function Page() {
           care team or glucose monitor.
         </p>
       </footer>
+
+      {activeModal === "report" && (
+        <ReportModal
+          onClose={() => setActiveModal("none")}
+          readings={logs.readings}
+          meals={logs.meals}
+          diabetesType={diabetesType}
+          displayName={persisted.profile.displayName}
+        />
+      )}
+
+      {activeModal === "badges" && (
+        <BadgeShelf
+          onClose={() => setActiveModal("none")}
+          unlocked={activeUnlockedBadges}
+        />
+      )}
     </main>
   )
 }
