@@ -128,6 +128,7 @@ function stripToJson(text: string): string {
 export async function analyzeMealAction(payload: {
   description?: string
   imageUrl?: string
+  imageBase64?: string
   imageMimeType?: string
 }): Promise<AnalyzeResult> {
   const apiKey = process.env.GEMINI_API_KEY
@@ -139,7 +140,9 @@ export async function analyzeMealAction(payload: {
   }
 
   const description = payload.description?.trim() ?? ""
-  const hasImage = !!payload.imageUrl
+  const hasBlobUrl = !!payload.imageUrl
+  const hasBase64 = !!payload.imageBase64
+  const hasImage = hasBlobUrl || hasBase64
 
   if (!description && !hasImage) {
     return { ok: false, error: "Please provide a meal description or upload a photo." }
@@ -157,13 +160,20 @@ export async function analyzeMealAction(payload: {
     }
 
     if (hasImage) {
-      // Download the image from Vercel Blob and convert to base64 for Gemini
-      const imageResp = await fetch(payload.imageUrl!)
-      if (!imageResp.ok) {
-        return { ok: false, error: "Failed to fetch uploaded image." }
+      let base64: string
+
+      if (hasBlobUrl) {
+        // Download from Vercel Blob (used on Vercel deployment)
+        const imageResp = await fetch(payload.imageUrl!)
+        if (!imageResp.ok) {
+          return { ok: false, error: "Failed to fetch uploaded image." }
+        }
+        const imageBuffer = Buffer.from(await imageResp.arrayBuffer())
+        base64 = imageBuffer.toString("base64")
+      } else {
+        // Use base64 directly (fallback for preview/dev)
+        base64 = payload.imageBase64!
       }
-      const imageBuffer = Buffer.from(await imageResp.arrayBuffer())
-      const base64 = imageBuffer.toString("base64")
 
       parts.push({
         inlineData: {

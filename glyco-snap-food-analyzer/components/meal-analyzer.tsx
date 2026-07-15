@@ -70,25 +70,46 @@ export function MealAnalyzer({
 
     try {
       // Build payload that will be sent to the server action
-      const payload: { description?: string; imageUrl?: string; imageMimeType?: string } = {}
+      const payload: {
+        description?: string
+        imageBase64?: string
+        imageMimeType?: string
+        imageUrl?: string
+      } = {}
       if (hasText) payload.description = description.trim()
 
-      // Upload to Vercel Blob directly from the client (bypasses server payload limits)
       if (file) {
-        const { url } = await upload(file.name, file, {
-          access: "public",
-          handleUploadUrl: "/api/upload",
-          onUploadProgress: (progress) => {
-            setUploadProgress(Math.round(progress.percentage ?? 0))
-          },
-        })
-
-        payload.imageUrl = url
-        payload.imageMimeType =
+        const mimeType =
           file.type || (isHeic(file) ? "image/heic" : "image/jpeg")
+
+        // Try Vercel Blob first (works on Vercel deployment).
+        // Falls back to base64 (works in preview/dev environments).
+        let uploaded = false
+        try {
+          const { url } = await upload(file.name, file, {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+            onUploadProgress: (progress) => {
+              setUploadProgress(Math.round(progress.percentage ?? 0))
+            },
+          })
+          payload.imageUrl = url
+          payload.imageMimeType = mimeType
+          uploaded = true
+        } catch {
+          // Vercel Blob unavailable — fall back to base64
+          const buf = await file.arrayBuffer()
+          const bytes = new Uint8Array(buf)
+          let binary = ""
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          payload.imageBase64 = btoa(binary)
+          payload.imageMimeType = mimeType
+        }
       }
 
-      // Send the Blob URL (not the raw file) to the server action
+      // Send to the server action
       const result = await analyzeMealAction(payload)
       if (result.ok) {
         onAnalyzed(result.data)
