@@ -1,18 +1,9 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, ImagePlus, Loader2, X, FileImage, Upload } from "lucide-react"
+import { ArrowRight, ImagePlus, Loader2, X, Upload } from "lucide-react"
 import { upload } from "@vercel/blob/client"
 import { analyzeMealAction, type MealAnalysis } from "@/app/actions"
-
-/** Check if a file looks like HEIC/HEIF (no conversion needed — Gemini supports it natively) */
-function isHeic(file: File): boolean {
-  return (
-    /\.hei[cf]$/i.test(file.name) ||
-    file.type === "image/heic" ||
-    file.type === "image/heif"
-  )
-}
 
 export function MealAnalyzer({
   onAnalyzed,
@@ -23,7 +14,6 @@ export function MealAnalyzer({
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [isHeicFile, setIsHeicFile] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -32,7 +22,6 @@ export function MealAnalyzer({
     if (preview) URL.revokeObjectURL(preview)
     setError(null)
     setPreview(null)
-    setIsHeicFile(false)
     setUploadProgress(0)
 
     if (!selected) {
@@ -41,13 +30,7 @@ export function MealAnalyzer({
     }
 
     setFile(selected)
-
-    if (isHeic(selected)) {
-      // Gemini supports HEIC natively — show a placeholder
-      setIsHeicFile(true)
-    } else {
-      setPreview(URL.createObjectURL(selected))
-    }
+    setPreview(URL.createObjectURL(selected))
   }
 
   function clearImage() {
@@ -79,8 +62,7 @@ export function MealAnalyzer({
       if (hasText) payload.description = description.trim()
 
       if (file) {
-        const mimeType =
-          file.type || (isHeic(file) ? "image/heic" : "image/jpeg")
+        const mimeType = file.type || "image/jpeg"
 
         // Try Vercel Blob first (works on Vercel deployment).
         // Falls back to base64 (works in preview/dev environments).
@@ -153,30 +135,12 @@ export function MealAnalyzer({
         <input
           ref={inputRef}
           type="file"
-          accept="image/*,.heic,.heif"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           className="sr-only"
           id="meal-image"
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
         />
-        {isHeicFile ? (
-          <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border bg-background">
-            <div className="flex flex-col items-center justify-center gap-2 px-4 py-9 text-center">
-              <FileImage className="h-8 w-8 text-primary" aria-hidden="true" />
-              <span className="text-sm font-medium text-foreground">{file?.name}</span>
-              <span className="text-xs text-muted-foreground">
-                HEIC photo selected — preview unavailable on this device
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={clearImage}
-              className="absolute right-2 top-2 rounded-full bg-foreground/70 p-1.5 text-background transition hover:bg-foreground"
-              aria-label="Remove image"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ) : preview ? (
+        {preview ? (
           <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={preview} alt="Selected meal preview" className="max-h-64 w-full object-cover" />
@@ -196,10 +160,31 @@ export function MealAnalyzer({
           >
             <ImagePlus className="h-8 w-8 text-primary" aria-hidden="true" />
             <span className="text-sm font-medium text-foreground">Upload a meal photo</span>
-            <span className="text-xs text-muted-foreground">PNG, JPG or HEIC, tap to browse</span>
+            <span className="text-xs text-muted-foreground">PNG or JPG, tap to browse</span>
           </label>
         )}
       </div>
+
+      <details className="mt-3 rounded-xl border border-border/60 bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+        <summary className="cursor-pointer select-none font-medium text-foreground/80 hover:text-foreground">
+          iPhone users — your photos are saved as HEIC by default
+        </summary>
+        <p className="mt-2">
+          <strong className="text-foreground/90">Make all future photos JPGs:</strong> go to{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Settings &gt; Camera &gt; Formats</span> and select{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Most Compatible</span>.
+        </p>
+        <p className="mt-1.5">
+          <strong className="text-foreground/90">Convert existing photos:</strong> copy a photo into the{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Files</span> app, long-press it, then use{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Quick Actions &gt; Convert Image &gt; JPEG</span>.
+          You can also build a custom 1-tap conversion script using the built-in{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Shortcuts</span> app linked to your Share Sheet.
+        </p>
+        <p className="mt-1.5">
+          <strong className="text-foreground/90">Or</strong> use an online HEIC-to-JPG converter.
+        </p>
+      </details>
 
       {/* Upload progress bar */}
       {showProgress && (
