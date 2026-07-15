@@ -150,9 +150,14 @@ export async function analyzeMealAction(formData: FormData): Promise<AnalyzeResu
     if (hasImage) {
       const bytes = Buffer.from(await image!.arrayBuffer())
       const base64 = bytes.toString("base64")
+      // Detect HEIC/HEIF by extension when MIME type is empty (Chrome/WebContainer)
+      const name = image!.name.toLowerCase()
+      const mime =
+        image!.type ||
+        (name.endsWith(".heic") || name.endsWith(".heif") ? "image/heic" : "image/jpeg")
       parts.push({
         inlineData: {
-          mimeType: image!.type || "image/jpeg",
+          mimeType: mime,
           data: base64,
         },
       })
