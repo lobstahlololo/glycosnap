@@ -4,6 +4,15 @@ import { useRef, useState } from "react"
 import { ArrowRight, ImagePlus, Loader2, X, FileImage } from "lucide-react"
 import { analyzeMealAction, type MealAnalysis } from "@/app/actions"
 
+/** Check if a file looks like HEIC/HEIF (no conversion needed — Gemini supports it natively) */
+function isHeic(file: File): boolean {
+  return (
+    /\.hei[cf]$/i.test(file.name) ||
+    file.type === "image/heic" ||
+    file.type === "image/heif"
+  )
+}
+
 export function MealAnalyzer({
   onAnalyzed,
 }: {
@@ -13,64 +22,28 @@ export function MealAnalyzer({
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [converting, setConverting] = useState(false)
-  const [conversionFailed, setConversionFailed] = useState(false)
+  const [isHeicFile, setIsHeicFile] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Quick client-side check before importing the heavy WASM library
-  function looksLikeHeic(file: File): boolean {
-    return (
-      /\.hei[cf]$/i.test(file.name) ||
-      file.type === "image/heic" ||
-      file.type === "image/heif"
-    )
-  }
-
-  function setFileState(selected: File | null) {
-    setFile(selected)
-    setConversionFailed(false)
+  function handleFile(selected: File | null) {
     if (preview) URL.revokeObjectURL(preview)
-    if (selected && !looksLikeHeic(selected)) {
-      setPreview(URL.createObjectURL(selected))
-    } else {
-      setPreview(null)
-    }
-  }
-
-  async function handleFile(selected: File | null) {
-    if (!selected) {
-      setFileState(null)
-      return
-    }
-
-    // Store the original file regardless (Gemini supports HEIC natively).
-    setFile(selected)
-    setConversionFailed(false)
     setError(null)
-
-    // Revoke old preview
-    if (preview) URL.revokeObjectURL(preview)
     setPreview(null)
+    setIsHeicFile(false)
 
-    // Quick check — if it doesn't look like HEIC, show preview directly
-    if (!looksLikeHeic(selected)) {
-      setPreview(URL.createObjectURL(selected))
+    if (!selected) {
+      setFile(null)
       return
     }
 
-    // HEIC — convert for preview only (Gemini gets the original file)
-    setConverting(true)
-    try {
-      const { heicTo } = await import("heic-to")
-      const jpegBlob = await heicTo({ blob: selected, type: "image/jpeg", quality: 0.85 })
-      setPreview(URL.createObjectURL(jpegBlob))
-    } catch {
-      // Preview conversion failed — show a placeholder.
-      // The original HEIC still gets sent to Gemini, which supports it natively.
-      setConversionFailed(true)
-    } finally {
-      setConverting(false)
+    setFile(selected)
+
+    if (isHeic(selected)) {
+      // Gemini supports HEIC natively — just show a placeholder, no conversion needed
+      setIsHeicFile(true)
+    } else {
+      setPreview(URL.createObjectURL(selected))
     }
   }
 
@@ -89,13 +62,31 @@ export function MealAnalyzer({
       return
     }
 
-    const formData = new FormData()
-    if (hasText) formData.set("description", description.trim())
-    if (file) formData.set("image", file)
+    // Build payload — read image as base64 on the client to avoid File serialization issues
+    const payload: { description?: string; imageBase64?: string; imageMimeType?: string } = {}
+    if (hasText) payload.description = description.trim()
+    if (file) {
+      try {
+        const buf = await file.arrayBuffer()
+        const bytes = new Uint8Array(buf)
+        let binary = ""
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i])
+        }
+        payload.imageBase64 = btoa(binary)
+        // Resolve MIME type: trust the browser, fall back to extension detection
+        payload.imageMimeType =
+          file.type ||
+          (isHeic(file) ? "image/heic" : "image/jpeg")
+      } catch {
+        setError("Could not read the selected image file.")
+        return
+      }
+    }
 
     setLoading(true)
     try {
-      const result = await analyzeMealAction(formData)
+      const result = await analyzeMealAction(payload)
       if (result.ok) {
         onAnalyzed(result.data)
         setDescription("")
@@ -140,13 +131,7 @@ export function MealAnalyzer({
           id="meal-image"
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
         />
-        {converting ? (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-9 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-            <span className="text-sm font-medium text-foreground">Preparing photo...</span>
-            <span className="text-xs text-muted-foreground">Hang tight, this only takes a moment</span>
-          </div>
-        ) : conversionFailed ? (
+        {isHeicFile ? (
           <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-border bg-background">
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-9 text-center">
               <FileImage className="h-8 w-8 text-primary" aria-hidden="true" />
@@ -197,7 +182,7 @@ export function MealAnalyzer({
 
       <button
         type="submit"
-        disabled={loading || converting}
+        disabled={loading}
         className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-foreground shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? (

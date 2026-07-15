@@ -119,7 +119,11 @@ function stripToJson(text: string): string {
   return t.trim()
 }
 
-export async function analyzeMealAction(formData: FormData): Promise<AnalyzeResult> {
+export async function analyzeMealAction(payload: {
+  description?: string
+  imageBase64?: string
+  imageMimeType?: string
+}): Promise<AnalyzeResult> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     return {
@@ -128,9 +132,8 @@ export async function analyzeMealAction(formData: FormData): Promise<AnalyzeResu
     }
   }
 
-  const description = (formData.get("description") as string | null)?.trim() ?? ""
-  const image = formData.get("image") as File | null
-  const hasImage = image && typeof image.size === "number" && image.size > 0
+  const description = payload.description?.trim() ?? ""
+  const hasImage = !!payload.imageBase64
 
   if (!description && !hasImage) {
     return { ok: false, error: "Please provide a meal description or upload a photo." }
@@ -148,17 +151,10 @@ export async function analyzeMealAction(formData: FormData): Promise<AnalyzeResu
     }
 
     if (hasImage) {
-      const bytes = Buffer.from(await image!.arrayBuffer())
-      const base64 = bytes.toString("base64")
-      // Detect HEIC/HEIF by extension when MIME type is empty (Chrome/WebContainer)
-      const name = image!.name.toLowerCase()
-      const mime =
-        image!.type ||
-        (name.endsWith(".heic") || name.endsWith(".heif") ? "image/heic" : "image/jpeg")
       parts.push({
         inlineData: {
-          mimeType: mime,
-          data: base64,
+          mimeType: payload.imageMimeType || "image/jpeg",
+          data: payload.imageBase64!,
         },
       })
     }
