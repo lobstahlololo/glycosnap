@@ -165,24 +165,6 @@
   * {
     @apply border-border outline-ring/50;
   }
-  /* Smooth in-page anchor navigation driven by the sidebar */
-  html {
-    scroll-behavior: smooth;
-  }
-  /* Respect reduced-motion users — disable smooth sc & transitions */
-  @media (prefers-reduced-motion: reduce) {
-    html {
-      scroll-behavior: auto;
-    }
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.001ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.001ms !important;
-      scroll-behavior: auto !important;
-    }
-  }
   body {
     @apply bg-background text-foreground;
     /* Subtle recipe-paper grain — warm, tactile, never a mesh gradient */
@@ -209,30 +191,43 @@
    Doctor Report — Print stylesheet
    When the user triggers window.print() from ReportModal, hide the rest of
    the app and re-format the report card onto a clean A4-shaped surface.
+
+   Uses the "hide everything, then re-show the modal" pattern: every element
+   is hidden by visibility, then `.report-modal-shell` (and all its
+   descendants) is forcibly made visible. This works even when the modal is
+   nested inside the dashboard layout — no `body > *` quirks, the modal just
+   appears in the print output regardless of where it lives in the tree.
    =========================================================================== */
 @media print {
-  /* Reset page chrome */
+  html,
   body {
     background: white !important;
-    color: black !important;
     background-image: none !important;
+    color: black !important;
   }
 
-  /* Hide everything except the open modal */
-  body > *:not(.report-modal-shell) {
-    display: none !important;
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
   }
 
-  /* The modal shell becomes the full page in print */
+  /* Re-show only the report modal shell and its descendants */
+  .report-modal-shell,
+  .report-modal-shell * {
+    visibility: visible !important;
+  }
+
+  /* Anchor the shell to the page so print renders it at full size */
   .report-modal-shell {
-    position: static !important;
+    position: absolute !important;
+    inset: 0 !important;
     background: white !important;
     padding: 0 !important;
     backdrop-filter: none !important;
-    display: block !important;
     overflow: visible !important;
   }
 
+  /* Reset the card itself for print */
   .report-modal-card {
     box-shadow: none !important;
     border: none !important;

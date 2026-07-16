@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { useEffect } from "react"
 import {
   UtensilsCrossed,
@@ -15,22 +17,22 @@ import {
   X,
   Menu,
 } from "lucide-react"
-import {
-  DIABETES_PROFILES,
-  type UserProfile,
-} from "@/lib/diabetes-profile"
+import { DIABETES_PROFILES, type UserProfile } from "@/lib/diabetes-profile"
 import { cn } from "@/lib/utils"
 
-export type SidebarSectionId =
-  | "section-new-entry"
-  | "section-glucose"
-  | "section-a1c"
-  | "section-insights"
-  | "section-history"
-  | "section-devices"
+export type SidebarNavId =
+  | "new-entry"
+  | "glucose"
+  | "a1c"
+  | "insights"
+  | "history"
+  | "devices"
 
 type NavItem = {
-  id: SidebarSectionId
+  id: SidebarNavId
+  href: string
+  /** Pathname key used to match `usePathname()` for the active item. */
+  path: string
   label: string
   shortLabel: string
   Icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>
@@ -38,37 +40,49 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   {
-    id: "section-new-entry",
+    id: "new-entry",
+    href: "/",
+    path: "/",
     label: "New Entry",
     shortLabel: "New",
     Icon: UtensilsCrossed,
   },
   {
-    id: "section-glucose",
+    id: "glucose",
+    href: "/glucose",
+    path: "/glucose",
     label: "Glucose Tracking",
     shortLabel: "Glucose",
     Icon: HeartPulse,
   },
   {
-    id: "section-a1c",
+    id: "a1c",
+    href: "/a1c",
+    path: "/a1c",
     label: "A1c Snapshot",
     shortLabel: "A1c",
     Icon: Activity,
   },
   {
-    id: "section-insights",
+    id: "insights",
+    href: "/insights",
+    path: "/insights",
     label: "Insights & Trends",
     shortLabel: "Insights",
     Icon: Sparkles,
   },
   {
-    id: "section-history",
+    id: "history",
+    href: "/history",
+    path: "/history",
     label: "History Log",
     shortLabel: "History",
     Icon: BookOpen,
   },
   {
-    id: "section-devices",
+    id: "devices",
+    href: "/devices",
+    path: "/devices",
     label: "Device Sync",
     shortLabel: "Devices",
     Icon: CloudUpload,
@@ -76,23 +90,23 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 export function Sidebar({
+  activeId,
   collapsed,
   onToggleCollapsed,
   mobileOpen,
   onCloseMobile,
-  activeSection,
   onNavigate,
   onOpenReport,
   onOpenEditProfile,
   profile,
   badgeCount,
 }: {
+  activeId: SidebarNavId | null
   collapsed: boolean
   onToggleCollapsed: () => void
   mobileOpen: boolean
   onCloseMobile: () => void
-  activeSection: SidebarSectionId
-  onNavigate: (id: SidebarSectionId) => void
+  onNavigate: (href: string) => void
   onOpenReport: () => void
   onOpenEditProfile: () => void
   profile: UserProfile
@@ -110,18 +124,10 @@ export function Sidebar({
     return () => window.removeEventListener("keydown", onKey)
   }, [mobileOpen, onCloseMobile])
 
-  function handleNavClick(id: SidebarSectionId) {
-    onNavigate(id)
-    // Close mobile drawer on selection
-    if (mobileOpen) onCloseMobile()
-  }
-
   return (
     <>
       {/* ============================================================
-          MOBILE: hamburger toggle (rendered separately by parent
-          via the MobileMenuButton export). Here we only render the
-          drawer + backdrop.
+          MOBILE: backdrop + drawer
           ============================================================ */}
       <div
         className={cn(
@@ -132,9 +138,6 @@ export function Sidebar({
         aria-hidden={!mobileOpen}
       />
 
-      {/* ============================================================
-          MOBILE DRAWER (full-width slide-in)
-          ============================================================ */}
       <aside
         id="sidebar-nav"
         aria-label="Primary navigation"
@@ -145,8 +148,8 @@ export function Sidebar({
       >
         <MobileDrawerContents
           navItems={NAV_ITEMS}
-          activeSection={activeSection}
-          onNavClick={handleNavClick}
+          activeId={activeId}
+          onNavigate={onNavigate}
           onCloseMobile={onCloseMobile}
           onOpenReport={() => {
             onOpenReport()
@@ -182,7 +185,11 @@ export function Sidebar({
             )}
           >
             {!collapsed && (
-              <div className="flex min-w-0 items-center gap-3">
+              <Link
+                href="/"
+                className="flex min-w-0 items-center gap-3 rounded-2xl px-1 py-1 transition hover:opacity-80"
+                aria-label="Go to dashboard home"
+              >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
                   <UtensilsCrossed className="h-5 w-5" aria-hidden="true" />
                 </span>
@@ -194,7 +201,7 @@ export function Sidebar({
                     A cozy journal
                   </p>
                 </div>
-              </div>
+              </Link>
             )}
             <button
               type="button"
@@ -216,12 +223,20 @@ export function Sidebar({
           <nav className="flex-1 overflow-y-auto px-3 py-4">
             <ul className="flex flex-col gap-1">
               {NAV_ITEMS.map((item) => {
-                const isActive = activeSection === item.id
+                const isActive = activeId === item.id
                 return (
                   <li key={item.id}>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate(item.id)}
+                    <Link
+                      href={item.href}
+                      onClick={(e) => {
+                        // If we're already on this page, suppress the default
+                        // navigation (router.push would no-op anyway, but this
+                        // also guarantees the mobile drawer closes).
+                        if (typeof window !== "undefined" && window.location.pathname === item.path) {
+                          e.preventDefault()
+                        }
+                        onNavigate(item.href)
+                      }}
                       aria-current={isActive ? "page" : undefined}
                       title={collapsed ? item.label : undefined}
                       className={cn(
@@ -247,7 +262,7 @@ export function Sidebar({
                           {item.label}
                         </span>
                       )}
-                    </button>
+                    </Link>
                   </li>
                 )
               })}
@@ -339,13 +354,11 @@ export function MobileMenuButton({
   )
 }
 
-/** ============================================================
-    Internal: Mobile drawer contents
-    ============================================================ */
+/** Mobile drawer contents — same nav but full-width, list rows instead of rail. */
 function MobileDrawerContents({
   navItems,
-  activeSection,
-  onNavClick,
+  activeId,
+  onNavigate,
   onCloseMobile,
   onOpenReport,
   onOpenEditProfile,
@@ -354,8 +367,8 @@ function MobileDrawerContents({
   badgeCount,
 }: {
   navItems: NavItem[]
-  activeSection: SidebarSectionId
-  onNavClick: (id: SidebarSectionId) => void
+  activeId: SidebarNavId | null
+  onNavigate: (href: string) => void
   onCloseMobile: () => void
   onOpenReport: () => void
   onOpenEditProfile: () => void
@@ -365,9 +378,13 @@ function MobileDrawerContents({
 }) {
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-5">
-        <div className="flex items-center gap-3">
+        <Link
+          href="/"
+          onClick={() => onCloseMobile()}
+          className="flex items-center gap-3 rounded-2xl px-1 py-1"
+          aria-label="Go to dashboard home"
+        >
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
             <UtensilsCrossed className="h-5 w-5" aria-hidden="true" />
           </span>
@@ -379,7 +396,7 @@ function MobileDrawerContents({
               A cozy journal
             </p>
           </div>
-        </div>
+        </Link>
         <button
           type="button"
           onClick={onCloseMobile}
@@ -390,16 +407,20 @@ function MobileDrawerContents({
         </button>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Sections">
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
-            const isActive = activeSection === item.id
+            const isActive = activeId === item.id
             return (
               <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => onNavClick(item.id)}
+                <Link
+                  href={item.href}
+                  onClick={(e) => {
+                    if (typeof window !== "undefined" && window.location.pathname === item.path) {
+                      e.preventDefault()
+                    }
+                    onNavigate(item.href)
+                  }}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-medium transition",
@@ -416,14 +437,13 @@ function MobileDrawerContents({
                     aria-hidden={true}
                   />
                   <span className="truncate">{item.label}</span>
-                </button>
+                </Link>
               </li>
             )
           })}
         </ul>
       </nav>
 
-      {/* Footer */}
       <div className="border-t border-sidebar-border px-3 py-3">
         <ul className="flex flex-col gap-1">
           <li>
