@@ -26,7 +26,7 @@ export default function GlucosePage() {
         editOpen={bar.editOpen}
         onCloseEdit={bar.onCloseEdit}
       />
-      <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-10 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-5xl gap-8 px-4 pb-10 lg:grid-cols-2">
         <BloodSugarInput onAdd={handleBloodSugarAdd} />
         {hasReadings ? (
           <BloodSugarChart readings={logs.readings} meals={logs.meals} />

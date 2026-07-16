@@ -27,7 +27,7 @@ export default function InsightsPage() {
       />
       <div className="mx-auto max-w-5xl px-4 pb-12">
         {hasReadings ? (
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-8 lg:grid-cols-2">
             {/* Recent Readings list */}
             <div className="rounded-3xl border border-border bg-card p-6 shadow-[0_8px_30px_-12px_rgba(120,80,50,0.18)]">
               <div className="flex items-center justify-between gap-3">

@@ -203,7 +203,7 @@ export function DeviceSync({
           </div>
         )}
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {DEVICES.map((d) => (
             <div
               key={d.id}
