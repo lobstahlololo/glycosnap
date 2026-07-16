@@ -165,6 +165,24 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Smooth in-page anchor navigation driven by the sidebar */
+  html {
+    scroll-behavior: smooth;
+  }
+  /* Respect reduced-motion users — disable smooth sc & transitions */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
   body {
     @apply bg-background text-foreground;
     /* Subtle recipe-paper grain — warm, tactile, never a mesh gradient */

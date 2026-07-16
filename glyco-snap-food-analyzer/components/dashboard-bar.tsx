@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, FileText, X, Heart, Sprout, Award, Settings2 } from "lucide-react"
+import { ChevronDown, X, Heart, Sprout, Award } from "lucide-react"
 import { BADGES, LEVELS, levelFromPoints } from "@/lib/gamification"
 import {
   DEFAULT_PROFILE,
@@ -14,16 +14,22 @@ import {
 const STORAGE_VERSION = 1
 const STORAGE_KEY = "glycosnap_v1"
 
+export type PersistedUI = {
+  sidebarExpanded: boolean
+}
+
 export type PersistedState = {
   profile: UserProfile
   gamification: { points: number; unlockedBadges: string[] }
   onboarded: boolean
+  ui: PersistedUI
 }
 
 export const DEFAULT_STATE: PersistedState = {
   profile: DEFAULT_PROFILE,
   gamification: { points: 0, unlockedBadges: [] },
   onboarded: false,
+  ui: { sidebarExpanded: true },
 }
 
 export function loadPersistedState(): PersistedState {
@@ -38,6 +44,7 @@ export function loadPersistedState(): PersistedState {
         ...parsed.state,
         profile: { ...DEFAULT_PROFILE, ...parsed.state.profile },
         gamification: { ...DEFAULT_STATE.gamification, ...parsed.state.gamification },
+        ui: { ...DEFAULT_STATE.ui, ...(parsed.state.ui ?? {}) },
       }
     }
   } catch {}
@@ -53,18 +60,20 @@ export function persistState(s: PersistedState) {
 export function DashboardBar({
   state,
   onChange,
-  onOpenReport,
   onOpenBadges,
+  editOpen,
+  onCloseEdit,
 }: {
   state: PersistedState
   onChange: (next: PersistedState) => void
-  onOpenReport: () => void
   onOpenBadges: () => void
+  /** Controlled profile-edit modal. Page passes `true` when triggered from sidebar. */
+  editOpen: boolean
+  onCloseEdit: () => void
 }) {
-  const [editOpen, setEditOpen] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
 
-  // First-time onboarding
+  // First-time onboarding — auto-opens once
   useEffect(() => {
     if (!state.onboarded) setOnboardingOpen(true)
   }, [state.onboarded])
@@ -80,26 +89,13 @@ export function DashboardBar({
       onboarded: true,
     })
     setOnboardingOpen(false)
-    setEditOpen(false)
+    onCloseEdit()
   }
 
   return (
     <>
-      {/* Top strip */}
-      <div className="mx-auto mt-4 flex max-w-5xl flex-wrap items-center gap-2 px-4">
-        <button
-          type="button"
-          onClick={() => setEditOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-card-foreground shadow-sm transition hover:bg-secondary"
-        >
-          <span aria-hidden="true">{profile.emoji}</span>
-          <span>{profile.shortLabel}</span>
-          <span className="hidden text-muted-foreground sm:inline">
-            · {profile.target.low}–{profile.target.high} mg/dL
-          </span>
-          <Settings2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        </button>
-
+      {/* Top strip — gamification only. Profile + Report live in the sidebar. */}
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 pb-2">
         <Pill icon={<Heart className="h-3.5 w-3.5 text-primary" aria-hidden="true" />}>
           <span className="tabular-nums font-semibold text-foreground">{state.gamification.points}</span>
           <span className="text-muted-foreground">&nbsp;Insight Score</span>
@@ -126,17 +122,6 @@ export function DashboardBar({
           <span className="tabular-nums">{earnedCount}</span>
           <span className="text-muted-foreground">/ {BADGES.length}&nbsp;badges</span>
         </button>
-
-        <div className="ml-auto">
-          <button
-            type="button"
-            onClick={onOpenReport}
-            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:brightness-95"
-          >
-            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
-            Doctor Report
-          </button>
-        </div>
       </div>
 
       {/* Onboarding modal */}
@@ -144,7 +129,7 @@ export function DashboardBar({
         <ModalShell title="Welcome to GlycoSnap" onClose={() => setOnboardingOpen(false)}>
           <p className="text-sm leading-relaxed text-muted-foreground">
             To personalize your healthy glucose range and recommendations, please share which best
-            describes your journey. You can change this anytime from the top of the page.
+            describes your journey. You can change this anytime from the sidebar.
           </p>
           <ul className="mt-4 grid gap-2">
             {DIABETES_TYPES.map((t) => (
@@ -183,11 +168,11 @@ export function DashboardBar({
         </ModalShell>
       )}
 
-      {/* Edit modal (gear icon) */}
+      {/* Edit modal — controlled by parent (sidebar triggers it) */}
       {editOpen && (
         <ModalShell
           title="Your health profile"
-          onClose={() => setEditOpen(false)}
+          onClose={onCloseEdit}
           subtitle={state.profile.displayName ?? "Anonymous"}
         >
           <p className="text-sm leading-relaxed text-muted-foreground">
@@ -236,6 +221,9 @@ export function DashboardBar({
           </ul>
         </ModalShell>
       )}
+
+      {/* Spacer so onboarding content has scroll margin */}
+      <span id="dashboard-strip-bottom" aria-hidden="true" />
     </>
   )
 }
