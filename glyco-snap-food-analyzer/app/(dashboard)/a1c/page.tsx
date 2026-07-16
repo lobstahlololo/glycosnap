@@ -1,23 +1,30 @@
 "use client"
 
-import { useDashboardState } from "@/components/dashboard-state"
+import { DashboardBar } from "@/components/dashboard-bar"
+import { useDashboardBarBindings, useDashboardState } from "@/components/dashboard-state"
 import { A1cCard } from "@/components/a1c-card"
+import { PageHeader } from "@/components/page-header"
 
 export default function A1cPage() {
   const { logs, persisted } = useDashboardState()
+  const bar = useDashboardBarBindings()
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10">
-      <div className="mb-6">
-        <p className="eyebrow">A1c Snapshot</p>
-        <h2 className="mt-2 text-balance font-serif text-3xl font-semibold leading-tight text-foreground">
-          Estimated A1c &amp; Time-in-Range
-        </h2>
-        <p className="mt-2 max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground">
-          A reading of your last 30 days of glucose data using the ADAG formula.
-          Logging more readings (or importing from your CGM) sharpens the estimate.
-        </p>
+    <>
+      <PageHeader
+        eyebrow="A1c Snapshot"
+        title="Estimated A1c &amp; Time-in-Range"
+        description="A reading of your last 30 days of glucose data using the ADAG formula. Logging more readings (or importing from your CGM) sharpens the estimate."
+      />
+      <DashboardBar
+        state={bar.state}
+        onChange={bar.onChange}
+        onOpenBadges={bar.onOpenBadges}
+        editOpen={bar.editOpen}
+        onCloseEdit={bar.onCloseEdit}
+      />
+      <div className="mx-auto max-w-5xl px-4 pb-12">
+        <A1cCard readings={logs.readings} diabetesType={persisted.profile.diabetesType} />
       </div>
-      <A1cCard readings={logs.readings} diabetesType={persisted.profile.diabetesType} />
-    </div>
+    </>
   )
 }

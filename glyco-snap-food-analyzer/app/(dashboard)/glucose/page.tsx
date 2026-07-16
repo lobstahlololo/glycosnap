@@ -1,27 +1,31 @@
 "use client"
 
 import { HeartPulse } from "lucide-react"
-import { useDashboardState } from "@/components/dashboard-state"
+import { DashboardBar } from "@/components/dashboard-bar"
+import { useDashboardBarBindings, useDashboardState } from "@/components/dashboard-state"
 import { BloodSugarChart } from "@/components/blood-sugar-chart"
 import { BloodSugarInput } from "@/components/blood-sugar-input"
+import { PageHeader } from "@/components/page-header"
 
 export default function GlucosePage() {
   const { logs, handleBloodSugarAdd } = useDashboardState()
+  const bar = useDashboardBarBindings()
   const hasReadings = logs.readings.length > 0
 
   return (
     <>
-      <div className="mx-auto max-w-5xl px-4 pb-4 pt-4">
-        <div className="flex items-center gap-3">
-          <hr className="flex-1 recipe-rule" />
-          <span className="flex shrink-0 items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            <HeartPulse className="h-4 w-4 text-primary" />
-            Glucose Tracking
-          </span>
-          <hr className="flex-1 recipe-rule" />
-        </div>
-      </div>
-
+      <PageHeader
+        eyebrow="Glucose Tracking"
+        title="Log a reading, watch the trend"
+        description="Every entry shows up on the chart below. Tap Log Reading to capture mg/dL, optional note, then watch the live trend as the day unfolds."
+      />
+      <DashboardBar
+        state={bar.state}
+        onChange={bar.onChange}
+        onOpenBadges={bar.onOpenBadges}
+        editOpen={bar.editOpen}
+        onCloseEdit={bar.onCloseEdit}
+      />
       <div className="mx-auto grid max-w-5xl gap-6 px-4 pb-10 lg:grid-cols-2">
         <BloodSugarInput onAdd={handleBloodSugarAdd} />
         {hasReadings ? (

@@ -3,15 +3,8 @@
 import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useMemo } from "react"
 import { UtensilsCrossed } from "lucide-react"
-import {
-  DashboardProvider,
-  useDashboardBarBindings,
-  useDashboardState,
-} from "@/components/dashboard-state"
-import {
-  DashboardBar,
-  type PersistedState,
-} from "@/components/dashboard-bar"
+import { DashboardProvider, useDashboardState } from "@/components/dashboard-state"
+import type { PersistedState } from "@/components/dashboard-bar"
 import { BadgeShelf } from "@/components/badge-shelf"
 import { ReportModal } from "@/components/report-modal"
 import {
@@ -25,6 +18,9 @@ import type { ReactNode } from "react"
  * Inner shell — receives state from the provider and renders the chrome.
  * Kept as a separate component so the outer layout can stay a thin wrapper
  * that provides the context.
+ *
+ * The DashboardBar (gamification pills) intentionally lives INSIDE each page
+ * now, so users see: page header text → pills → page content.
  */
 function DashboardShell({ children }: { children: ReactNode }) {
   const {
@@ -34,7 +30,6 @@ function DashboardShell({ children }: { children: ReactNode }) {
     logs,
     activeModal,
     setActiveModal,
-    editProfileOpen,
     setEditProfileOpen,
     mobileOpen,
     setMobileOpen,
@@ -42,7 +37,6 @@ function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
 
-  const bar = useDashboardBarBindings()
   const diabetesType = persisted.profile.diabetesType
 
   const activeId = useMemo(() => {
@@ -106,15 +100,6 @@ function DashboardShell({ children }: { children: ReactNode }) {
             </p>
           </div>
         </div>
-
-        {/* Dashboard gamification strip */}
-        <DashboardBar
-          state={bar.state}
-          onChange={bar.onChange}
-          onOpenBadges={bar.onOpenBadges}
-          editOpen={bar.editOpen}
-          onCloseEdit={bar.onCloseEdit}
-        />
 
         {children}
 
