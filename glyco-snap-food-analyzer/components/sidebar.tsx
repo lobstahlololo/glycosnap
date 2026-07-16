@@ -7,7 +7,7 @@ import {
   Activity,
   Sparkles,
   BookOpen,
-  UploadCloud,
+  CloudUpload,
   PanelLeftClose,
   PanelLeftOpen,
   FileText,
@@ -71,7 +71,7 @@ const NAV_ITEMS: NavItem[] = [
     id: "section-devices",
     label: "Device Sync",
     shortLabel: "Devices",
-    Icon: UploadCloud,
+    Icon: CloudUpload,
   },
 ]
 
