@@ -22,7 +22,7 @@ export default function DevicesPage() {
         editOpen={bar.editOpen}
         onCloseEdit={bar.onCloseEdit}
       />
-      <div className="mx-auto max-w-5xl px-4 pt-10 pb-12">
+      <div className="mx-auto max-w-5xl px-4 pt-8 pb-12">
         <DeviceSync onImport={handleCsvImport} />
       </div>
     </>
