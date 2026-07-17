@@ -26,7 +26,7 @@ export default function NewEntryPage() {
         editOpen={bar.editOpen}
         onCloseEdit={bar.onCloseEdit}
       />
-      <div className="mx-auto grid max-w-5xl gap-8 px-4 pt-8 pb-10 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-5xl gap-8 px-4 pt-6 pb-10 lg:grid-cols-2">
         <MealAnalyzer onAnalyzed={handleAnalyzed} />
         <div className="flex flex-col gap-6">
           {latest ? (

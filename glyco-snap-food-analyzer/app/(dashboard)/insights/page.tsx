@@ -25,7 +25,7 @@ export default function InsightsPage() {
         editOpen={bar.editOpen}
         onCloseEdit={bar.onCloseEdit}
       />
-      <div className="mx-auto max-w-5xl px-4 pt-8 pb-12">
+      <div className="mx-auto max-w-5xl px-4 pt-6 pb-12">
         {hasReadings ? (
           <div className="grid gap-8 lg:grid-cols-2">
             {/* Recent Readings list */}

@@ -22,7 +22,7 @@ export default function HistoryPage() {
         editOpen={bar.editOpen}
         onCloseEdit={bar.onCloseEdit}
       />
-      <div className="mx-auto max-w-5xl px-4 pt-8 pb-12">
+      <div className="mx-auto max-w-5xl px-4 pt-6 pb-12">
         <HistoryLog meals={logs.meals} />
       </div>
     </>
