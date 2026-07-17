@@ -19,7 +19,7 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <header className={cn("mx-auto max-w-5xl px-4 pt-6 pb-2 sm:pt-8", className)}>
+    <header className={cn("mx-auto max-w-5xl px-4 pt-6 pb-1 sm:pt-8", className)}>
       <p className="eyebrow">{eyebrow}</p>
       <h2 className="mt-2 text-balance font-serif text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
         {title}

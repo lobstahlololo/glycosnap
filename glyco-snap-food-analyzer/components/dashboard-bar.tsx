@@ -95,7 +95,7 @@ export function DashboardBar({
   return (
     <>
       {/* Top strip — gamification only. Profile + Report live in the sidebar. */}
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 pt-3 pb-4 sm:pt-4">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 pt-1 pb-4 sm:pt-2">
         <Pill icon={<Heart className="h-3.5 w-3.5 text-primary" aria-hidden="true" />}>
           <span className="tabular-nums font-semibold text-foreground">{state.gamification.points}</span>
           <span className="text-muted-foreground">&nbsp;Insight Score</span>
