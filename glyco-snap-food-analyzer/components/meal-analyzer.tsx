@@ -1,7 +1,8 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, ImagePlus, Loader2, X } from "lucide-react"
+import { ArrowRight, FileImage, ImagePlus, Loader2, Upload, X } from "lucide-react"
+import { upload } from "@vercel/blob/client"
 import { analyzeMealAction, type MealAnalysis } from "@/app/actions"
 
 export function MealAnalyzer({
@@ -13,51 +14,28 @@ export function MealAnalyzer({
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [converting, setConverting] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function setFilePreview(selected: File | null) {
-    setFile(selected)
+  function handleFile(selected: File | null) {
     if (preview) URL.revokeObjectURL(preview)
-    setPreview(selected ? URL.createObjectURL(selected) : null)
-  }
+    setError(null)
+    setPreview(null)
+    setUploadProgress(0)
 
-  async function handleFile(selected: File | null) {
     if (!selected) {
-      setFilePreview(null)
+      setFile(null)
       return
     }
 
+    setFile(selected)
+    // HEIC/HEIF can't be rendered by most browsers — show a friendly placeholder
+    // instead of a broken image. A converted preview may appear after analysis,
+    // but conversion is best-effort and can fail on mobile devices.
     const isHeic =
-      /\.hei[cf]$/i.test(selected.name) ||
-      selected.type === "image/heic" ||
-      selected.type === "image/heif"
-
-    if (isHeic) {
-      setError(null)
-      setConverting(true)
-      try {
-        const heic2any = (await import("heic2any")).default
-        const converted = await heic2any({ blob: selected, toType: "image/jpeg", quality: 0.9 })
-        const jpegBlob = Array.isArray(converted) ? converted[0] : converted
-        const jpegFile = new File(
-          [jpegBlob],
-          selected.name.replace(/\.hei[cf]$/i, ".jpg"),
-          { type: "image/jpeg" },
-        )
-        setFilePreview(jpegFile)
-      } catch {
-        setError("Couldn't convert that HEIC image. Try a JPG or PNG instead.")
-        setFilePreview(null)
-        if (inputRef.current) inputRef.current.value = ""
-      } finally {
-        setConverting(false)
-      }
-      return
-    }
-
-    setFilePreview(selected)
+      /heic|heif/i.test(selected.type || "") || /\.heic$|\.heif$/i.test(selected.name)
+    setPreview(isHeic ? null : URL.createObjectURL(selected))
   }
 
   function clearImage() {
@@ -75,13 +53,58 @@ export function MealAnalyzer({
       return
     }
 
-    const formData = new FormData()
-    if (hasText) formData.set("description", description.trim())
-    if (file) formData.set("image", file)
-
     setLoading(true)
+    setUploadProgress(0)
+
     try {
-      const result = await analyzeMealAction(formData)
+      // Build payload that will be sent to the server action
+      const payload: {
+        description?: string
+        imageBase64?: string
+        imageMimeType?: string
+        imageUrl?: string
+      } = {}
+      if (hasText) payload.description = description.trim()
+
+      if (file) {
+        const mimeType = file.type || "image/jpeg"
+
+        // Try Vercel Blob first (works on Vercel deployment).
+        // Falls back to base64 (works in preview/dev environments).
+        let uploaded = false
+        try {
+          const { url } = await upload(file.name, file, {
+            access: "public",
+            handleUploadUrl: "/api/upload",
+            onUploadProgress: (progress) => {
+              setUploadProgress(Math.round(progress.percentage ?? 0))
+            },
+          })
+          payload.imageUrl = url
+          payload.imageMimeType = mimeType
+          uploaded = true
+        } catch {
+          // Vercel Blob unavailable — fall back to base64 (preview/dev environments).
+          // Server actions have a body limit, so refuse oversized photos with a clear message.
+          if (file.size > 8 * 1024 * 1024) {
+            setError(
+              "This photo is too large for this environment (no Blob storage connected). Try a smaller photo, or add BLOB_READ_WRITE_TOKEN to the project's API Keys.",
+            )
+            return
+          }
+          const buf = await file.arrayBuffer()
+          const bytes = new Uint8Array(buf)
+          let binary = ""
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          payload.imageBase64 = btoa(binary)
+          payload.imageMimeType = mimeType
+        }
+      }
+
+      // Send to the server action
+      const result = await analyzeMealAction(payload)
       if (result.ok) {
         onAnalyzed(result.data)
         setDescription("")
@@ -89,12 +112,17 @@ export function MealAnalyzer({
       } else {
         setError(result.error)
       }
-    } catch {
-      setError("Something went wrong. Please try again.")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
     } finally {
       setLoading(false)
+      setUploadProgress(0)
     }
   }
+
+  const showProgress = loading && file && uploadProgress > 0 && uploadProgress < 100
+  const isHeicSelected =
+    !!file && (/heic|heif/i.test(file.type || "") || /\.heic$|\.heif$/i.test(file.name))
 
   return (
     <form
@@ -121,7 +149,7 @@ export function MealAnalyzer({
         <input
           ref={inputRef}
           type="file"
-          accept="image/*,.heic,.heif"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
           className="sr-only"
           id="meal-image"
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
@@ -139,11 +167,15 @@ export function MealAnalyzer({
               <X className="h-4 w-4" />
             </button>
           </div>
-        ) : converting ? (
+        ) : isHeicSelected ? (
           <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-9 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-            <span className="text-sm font-medium text-foreground">Converting HEIC photo...</span>
-            <span className="text-xs text-muted-foreground">Hang tight, this only takes a moment</span>
+            <FileImage className="h-8 w-8 text-primary" aria-hidden="true" />
+            <span className="max-w-full truncate px-2 text-sm font-medium text-foreground">
+              {file?.name ?? "HEIC photo selected"}
+            </span>
+            <span className="px-2 text-xs text-muted-foreground">
+              HEIC photo selected — we can still analyze it, but the preview may not display on all devices
+            </span>
           </div>
         ) : (
           <label
@@ -152,10 +184,49 @@ export function MealAnalyzer({
           >
             <ImagePlus className="h-8 w-8 text-primary" aria-hidden="true" />
             <span className="text-sm font-medium text-foreground">Upload a meal photo</span>
-            <span className="text-xs text-muted-foreground">PNG, JPG or HEIC, tap to browse</span>
+            <span className="text-xs text-muted-foreground">PNG, JPG, or HEIC — tap to browse</span>
           </label>
         )}
       </div>
+
+      <details className="mt-3 rounded-xl border border-border/60 bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+        <summary className="cursor-pointer select-none font-medium text-foreground/80 hover:text-foreground">
+          iPhone users — your photos are saved as HEIC by default
+        </summary>
+        <p className="mt-2">
+          <strong className="text-foreground/90">Make all future photos JPGs:</strong> go to{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Settings &gt; Camera &gt; Formats</span> and select{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Most Compatible</span>.
+        </p>
+        <p className="mt-1.5">
+          <strong className="text-foreground/90">Convert existing photos:</strong> copy a photo into the{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Files</span> app, long-press it, then use{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Quick Actions &gt; Convert Image &gt; JPEG</span>.
+          You can also build a custom 1-tap conversion script using the built-in{" "}
+          <span className="font-mono text-[11px] text-foreground/80">Shortcuts</span> app linked to your Share Sheet.
+        </p>
+        <p className="mt-1.5">
+          <strong className="text-foreground/90">Or</strong> use an online HEIC-to-JPG converter.
+        </p>
+      </details>
+
+      {/* Upload progress bar */}
+      {showProgress && (
+        <div className="mt-3">
+          <div className="flex items-center gap-2">
+            <Upload className="h-4 w-4 text-primary animate-pulse" />
+            <span className="text-xs font-medium text-foreground">
+              Uploading to cloud… {uploadProgress}%
+            </span>
+          </div>
+          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-primary transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">
@@ -165,13 +236,15 @@ export function MealAnalyzer({
 
       <button
         type="submit"
-        disabled={loading || converting}
+        disabled={loading}
         className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-base font-semibold text-primary-foreground shadow-sm transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {loading ? (
           <>
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            Simmering the numbers...
+            {uploadProgress > 0 && uploadProgress < 100
+              ? `Uploading ${uploadProgress}%…`
+              : "Analyzing meal…"}
           </>
         ) : (
           <>

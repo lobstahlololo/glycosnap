@@ -1,3 +1,6 @@
+"use client"
+
+import { useState } from "react"
 import { BadgeCheck, Beef, Droplet, Flame, Info, Wheat } from "lucide-react"
 import type { MealAnalysis } from "@/app/actions"
 import { GlycemicBadge } from "@/components/glycemic-badge"
@@ -9,6 +12,10 @@ export function ResultCard({ data }: { data: MealAnalysis }) {
       aria-live="polite"
       className="rounded-3xl border border-border bg-card p-6 shadow-[0_8px_30px_-12px_rgba(120,80,50,0.18)]"
     >
+      {/* Image preview — Cloudinary tries to convert HEIC to JPEG for browser viewing,
+          but conversion is best-effort and may not work on all devices. */}
+      <MealImage data={data} />
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Latest analysis</p>
@@ -84,5 +91,33 @@ export function ResultCard({ data }: { data: MealAnalysis }) {
         </div>
       ) : null}
     </section>
+  )
+}
+
+function MealImage({ data }: { data: MealAnalysis }) {
+  const [src, setSrc] = useState<string | null>(
+    data.preview_image_url ?? data.image_url ?? null,
+  )
+
+  if (!src) return null
+
+  return (
+    <div className="mb-5 overflow-hidden rounded-2xl">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={data.meal_name}
+        className="max-h-64 w-full object-cover"
+        onError={() => {
+          // Cloudinary conversion failed (e.g. NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME unset)
+          // — fall back to the raw blob URL, then hide if that fails too.
+          if (src === data.preview_image_url && data.image_url) {
+            setSrc(data.image_url)
+          } else {
+            setSrc(null)
+          }
+        }}
+      />
+    </div>
   )
 }

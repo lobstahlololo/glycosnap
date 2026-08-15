@@ -154,8 +154,6 @@
     --chart-5: oklch(0.7 0.1 30);
     --sidebar: oklch(0.29 0.016 52);
     --sidebar-foreground: oklch(0.93 0.014 80);
-    --sidebar-primary: oklch(0.66 0.12 44);
-    --sidebar-primary-foreground: oklch(0.22 0.02 50);
     --sidebar-accent: oklch(0.4 0.05 150);
     --sidebar-accent-foreground: oklch(0.92 0.03 145);
     --sidebar-border: oklch(0.86 0.02 72 / 14%);
@@ -186,5 +184,82 @@
     background:
       linear-gradient(to right, var(--border), var(--border)) top/100% 1px no-repeat,
       linear-gradient(to right, var(--border), var(--border)) bottom/100% 1px no-repeat;
+  }
+}
+
+/* ===========================================================================
+   Doctor Report — Print stylesheet
+   When the user triggers window.print() from ReportModal, hide the rest of
+   the app and re-format the report card onto a clean A4-shaped surface.
+
+   Uses the "hide everything, then re-show the modal" pattern: every element
+   is hidden by visibility, then `.report-modal-shell` (and all its
+   descendants) is forcibly made visible. This works even when the modal is
+   nested inside the dashboard layout — no `body > *` quirks, the modal just
+   appears in the print output regardless of where it lives in the tree.
+   =========================================================================== */
+@media print {
+  html,
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: black !important;
+  }
+
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Re-show only the report modal shell and its descendants */
+  .report-modal-shell,
+  .report-modal-shell * {
+    visibility: visible !important;
+  }
+
+  /* Anchor the shell to the page so print renders it at full size */
+  .report-modal-shell {
+    position: absolute !important;
+    inset: 0 !important;
+    background: white !important;
+    padding: 0 !important;
+    backdrop-filter: none !important;
+    overflow: visible !important;
+  }
+
+  /* Reset the card itself for print */
+  .report-modal-card {
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Force black-on-white text inside the report */
+  .report-modal-card * {
+    color: black !important;
+    background: transparent !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Friendly A4 sizing */
+  @page {
+    size: A4;
+    margin: 14mm 14mm 14mm 14mm;
+  }
+
+  /* Avoid awkward page splits inside key blocks */
+  .report-modal-card header,
+  .report-modal-card section,
+  .report-modal-card footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Hide any sticky or "screen only" elements within a report-modal-shell */
+  .report-modal-card .sticky {
+    position: static !important;
   }
 }
