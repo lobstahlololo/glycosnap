@@ -18,7 +18,12 @@ import {
   type PersistedState,
 } from "@/components/dashboard-bar"
 import type { LoggedMeal } from "@/components/history-log"
-import { computeStreak, pointsForLog, unlockedBadgeIds } from "@/lib/gamification"
+import {
+  computeStreak,
+  dailyStreakBonus,
+  pointsForLog,
+  unlockedBadgeIds,
+} from "@/lib/gamification"
 
 /**
  * Logs (meals + readings) live under a separate localStorage key from the
@@ -41,6 +46,8 @@ type DashboardContextValue = {
   handleAnalyzed: (data: MealAnalysis) => void
   handleBloodSugarAdd: (reading: BloodSugarReading) => void
   handleCsvImport: (importedReadings: BloodSugarReading[]) => void
+  /** Award the once-per-day insight points (+2) after a successful AI insight. */
+  awardInsightPoints: () => void
   activeModal: ActiveModal
   setActiveModal: (next: ActiveModal) => void
   editProfileOpen: boolean
@@ -50,6 +57,11 @@ type DashboardContextValue = {
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null)
+
+/** Today's date key (YYYY-MM-DD) — matches how computeStreak slices timestamps. */
+function dateKey(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 function loadLogs(): LogsState {
   if (typeof window === "undefined") return { meals: [], readings: [] }
@@ -119,7 +131,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       count: number,
       newLogs: LogsState,
     ): Partial<PersistedState> => {
-      const pointsDelta = pointsForLog(kind === "csv" ? "reading" : kind) * count
+      const basePoints = pointsForLog(kind === "csv" ? "reading" : kind) * count
       const streak = computeStreak(newLogs.readings.map((r) => r.timestamp))
       const ctx = {
         readings: newLogs.readings,
@@ -127,16 +139,42 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         streak,
         diabetesType: persisted.profile.diabetesType,
       }
-      void streak
+      // Streak bonus: +10 at 3 days, +25 at 7, +50 at 30 — granted at most
+      // once per day so re-logging can't farm it.
+      const today = dateKey()
+      const bonus = dailyStreakBonus(streak)
+      const bonusEarned = bonus > 0 && persisted.gamification.lastStreakBonusDate !== today
       return {
         gamification: {
-          points: persisted.gamification.points + pointsDelta,
+          points:
+            persisted.gamification.points + basePoints + (bonusEarned ? bonus : 0),
           unlockedBadges: unlockedBadgeIds(ctx),
+          lastStreakBonusDate: bonusEarned ? today : persisted.gamification.lastStreakBonusDate,
+          lastInsightDate: persisted.gamification.lastInsightDate,
         },
       }
     },
     [persisted],
   )
+
+  /**
+   * Award the insight log's +2 points once per calendar day, after Gemini
+   * returns an insight successfully (see GlucoseInsightSection).
+   */
+  const awardInsightPoints = useCallback(() => {
+    setPersistedState((p) => {
+      const today = dateKey()
+      if (p.gamification.lastInsightDate === today) return p
+      return {
+        ...p,
+        gamification: {
+          ...p.gamification,
+          points: p.gamification.points + pointsForLog("insight"),
+          lastInsightDate: today,
+        },
+      }
+    })
+  }, [])
 
   const handleAnalyzed = useCallback(
     (data: MealAnalysis) => {
@@ -218,6 +256,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       handleAnalyzed,
       handleBloodSugarAdd,
       handleCsvImport,
+      awardInsightPoints,
       activeModal,
       setActiveModal,
       editProfileOpen,
@@ -233,6 +272,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       handleAnalyzed,
       handleBloodSugarAdd,
       handleCsvImport,
+      awardInsightPoints,
       activeModal,
       editProfileOpen,
       mobileOpen,
