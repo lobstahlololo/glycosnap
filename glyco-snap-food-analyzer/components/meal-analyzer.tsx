@@ -1,9 +1,16 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ArrowRight, FileImage, ImagePlus, Loader2, Upload, X } from "lucide-react"
+import { ArrowRight, ImagePlus, Loader2, Upload, X } from "lucide-react"
 import { upload } from "@vercel/blob/client"
 import { analyzeMealAction, type MealAnalysis } from "@/app/actions"
+import {
+  HEIC_CONVERSION_ENABLED,
+  HEIC_REJECTION_MESSAGE,
+  IMAGE_ACCEPT,
+  convertHeicToJpeg,
+  isHeicFile,
+} from "@/lib/heic"
 
 export function MealAnalyzer({
   onAnalyzed,
@@ -18,7 +25,7 @@ export function MealAnalyzer({
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function handleFile(selected: File | null) {
+  async function handleFile(selected: File | null) {
     if (preview) URL.revokeObjectURL(preview)
     setError(null)
     setPreview(null)
@@ -29,13 +36,28 @@ export function MealAnalyzer({
       return
     }
 
+    // HEIC/HEIF handling is gated by HEIC_CONVERSION_ENABLED in @/lib/heic.
+    if (isHeicFile(selected)) {
+      if (!HEIC_CONVERSION_ENABLED) {
+        // Flag is off: HEIC is not accepted anywhere in the app.
+        setError(HEIC_REJECTION_MESSAGE)
+        setFile(null)
+        return
+      }
+      // Flag is on: convert to JPEG in the browser so preview + upload work.
+      try {
+        const converted = await convertHeicToJpeg(selected)
+        setFile(converted)
+        setPreview(URL.createObjectURL(converted))
+      } catch {
+        setError("Couldn't convert this HEIC photo — try a JPG instead.")
+        setFile(null)
+      }
+      return
+    }
+
     setFile(selected)
-    // HEIC/HEIF can't be rendered by most browsers — show a friendly placeholder
-    // instead of a broken image. A converted preview may appear after analysis,
-    // but conversion is best-effort and can fail on mobile devices.
-    const isHeic =
-      /heic|heif/i.test(selected.type || "") || /\.heic$|\.heif$/i.test(selected.name)
-    setPreview(isHeic ? null : URL.createObjectURL(selected))
+    setPreview(URL.createObjectURL(selected))
   }
 
   function clearImage() {
@@ -121,8 +143,6 @@ export function MealAnalyzer({
   }
 
   const showProgress = loading && file && uploadProgress > 0 && uploadProgress < 100
-  const isHeicSelected =
-    !!file && (/heic|heif/i.test(file.type || "") || /\.heic$|\.heif$/i.test(file.name))
 
   return (
     <form
@@ -149,7 +169,7 @@ export function MealAnalyzer({
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
+          accept={IMAGE_ACCEPT}
           className="sr-only"
           id="meal-image"
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
@@ -167,16 +187,6 @@ export function MealAnalyzer({
               <X className="h-4 w-4" />
             </button>
           </div>
-        ) : isHeicSelected ? (
-          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-background px-4 py-9 text-center">
-            <FileImage className="h-8 w-8 text-primary" aria-hidden="true" />
-            <span className="max-w-full truncate px-2 text-sm font-medium text-foreground">
-              {file?.name ?? "HEIC photo selected"}
-            </span>
-            <span className="px-2 text-xs text-muted-foreground">
-              HEIC photo selected — we can still analyze it, but the preview may not display on all devices
-            </span>
-          </div>
         ) : (
           <label
             htmlFor="meal-image"
@@ -184,7 +194,9 @@ export function MealAnalyzer({
           >
             <ImagePlus className="h-8 w-8 text-primary" aria-hidden="true" />
             <span className="text-sm font-medium text-foreground">Upload a meal photo</span>
-            <span className="text-xs text-muted-foreground">PNG, JPG, or HEIC — tap to browse</span>
+            <span className="text-xs text-muted-foreground">
+              {HEIC_CONVERSION_ENABLED ? "PNG, JPG, or HEIC — tap to browse" : "PNG, JPG, or WebP — tap to browse"}
+            </span>
           </label>
         )}
       </div>
