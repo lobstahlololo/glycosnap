@@ -76,20 +76,6 @@ export function BloodSugarChart({
 
     const minTime = Math.min(...allTimes)
     const maxTime = Math.max(...allTimes)
-    const timeRange = Math.max(maxTime - minTime, 3600000) // at least 1 hour
-
-    // Add axis ticks at readable times
-    const roundedMin = new Date(minTime)
-    roundedMin.setMinutes(0, 0, 0)
-    const tickData: ChartPoint[] = []
-    for (let t = roundedMin.getTime(); t <= maxTime + 3600000; t += 3600000) {
-      const d = new Date(t)
-      tickData.push({
-        label: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        value: 0,
-        timestamp: t,
-      })
-    }
 
     return {
       chartData: points,
@@ -146,27 +132,54 @@ export function BloodSugarChart({
     yTicks.push(v)
   }
 
-  // X-axis ticks (hourly)
+  // X-axis ticks — adaptive interval so a multi-day span shows ~6–8 readable
+  // labels (dates / day+hour) instead of hundreds of repeated hourly times.
+  const HOUR = 3600000
+  const DAY = 24 * HOUR
+  const tickSteps = [
+    30 * 60000,
+    HOUR,
+    2 * HOUR,
+    3 * HOUR,
+    6 * HOUR,
+    12 * HOUR,
+    DAY,
+    2 * DAY,
+    7 * DAY,
+  ]
+  const tickStep = tickSteps.find((s) => s >= tRange / 6) ?? 14 * DAY
   const xTicks: { label: string; x: number }[] = []
-  const startHour = new Date(minT)
-  startHour.setMinutes(0, 0, 0)
-  for (let t = startHour.getTime(); t <= maxT + 3600000; t += 3600000) {
+  const firstTick = Math.ceil(minT / tickStep) * tickStep
+  for (let t = firstTick; t <= maxT; t += tickStep) {
     const d = new Date(t)
     const x = xScale(t)
-    if (x >= pad.left && x <= pad.left + plotW) {
-      xTicks.push({
-        label: d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        x,
-      })
-    }
+    if (x < pad.left || x > pad.left + plotW) continue
+    const label =
+      tickStep >= DAY
+        ? d.toLocaleDateString([], { month: "short", day: "numeric" })
+        : tickStep >= 6 * HOUR
+          ? `${d.toLocaleDateString([], { weekday: "short" })} ${d.toLocaleTimeString([], { hour: "numeric" })}`
+          : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    xTicks.push({ label, x })
   }
 
-  // Tooltip state
-  const [tooltip, setTooltip] = useState<{
-    x: number
-    y: number
-    data: ChartPoint | null
-  } | null>(null)
+  // Hover state — index of the reading snapped to under the cursor
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+
+  const hoveredPoint = hoverIndex !== null ? (chartData[hoverIndex] ?? null) : null
+  // Nearest meal within an hour of the hovered reading, so its context shows too
+  const hoveredMeal = hoveredPoint
+    ? mealMarkers.reduce<ChartPoint | null>((best, m) => {
+        if (Math.abs(m.timestamp - hoveredPoint.timestamp) > 60 * 60000) return best
+        if (
+          !best ||
+          Math.abs(m.timestamp - hoveredPoint.timestamp) <
+            Math.abs(best.timestamp - hoveredPoint.timestamp)
+        )
+          return m
+        return best
+      }, null)
+    : null
 
   if (readings.length === 0 && meals.length === 0) return null
 
@@ -191,7 +204,7 @@ export function BloodSugarChart({
             width={svgW}
             height={svgH}
             className="overflow-visible"
-            onMouseLeave={() => setTooltip(null)}
+            onMouseLeave={() => setHoverIndex(null)}
           >
             {/* Target range background */}
             <rect
@@ -293,21 +306,10 @@ export function BloodSugarChart({
                 key={i}
                 cx={xScale(p.timestamp)}
                 cy={yScale(p.value)}
-                r={5}
+                r={hoverIndex === i ? 7 : 5}
                 fill={p.value > 180 ? "var(--destructive)" : "var(--primary)"}
                 stroke="var(--card)"
                 strokeWidth={2}
-                className="cursor-pointer"
-                onMouseEnter={(e) => {
-                  const rect = containerRef.current?.getBoundingClientRect()
-                  if (rect) {
-                    setTooltip({
-                      x: xScale(p.timestamp),
-                      y: yScale(p.value),
-                      data: p,
-                    })
-                  }
-                }}
               />
             ))}
 
@@ -365,26 +367,104 @@ export function BloodSugarChart({
                 {t.label}
               </text>
             ))}
+
+            {/* Hover crosshair */}
+            {hoveredPoint && (
+              <line
+                x1={xScale(hoveredPoint.timestamp)}
+                y1={pad.top}
+                x2={xScale(hoveredPoint.timestamp)}
+                y2={pad.top + plotH}
+                stroke="var(--foreground)"
+                strokeWidth={1}
+                strokeDasharray="2 3"
+                opacity={0.35}
+                pointerEvents="none"
+              />
+            )}
+
+            {/* Hover capture layer — snaps to the nearest reading anywhere in the plot */}
+            <rect
+              x={pad.left}
+              y={pad.top}
+              width={plotW}
+              height={plotH}
+              fill="transparent"
+              onMouseMove={(e) => {
+                if (chartData.length === 0) return
+                const svgEl = e.currentTarget.ownerSVGElement
+                if (!svgEl) return
+                const rect = svgEl.getBoundingClientRect()
+                const mx = e.clientX - rect.left
+                const t = minT + ((mx - pad.left) / plotW) * tRange
+                let best = 0
+                for (let i = 1; i < chartData.length; i++) {
+                  if (
+                    Math.abs(chartData[i].timestamp - t) <
+                    Math.abs(chartData[best].timestamp - t)
+                  ) {
+                    best = i
+                  }
+                }
+                setHoverIndex(best)
+              }}
+            />
           </svg>
         )}
 
-        {/* HTML Tooltip */}
-        {tooltip && tooltip.data && (
+        {/* HTML Tooltip — full data for the hovered point */}
+        {hoveredPoint && (
           <div
             className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full"
             style={{
-              left: tooltip.x,
-              top: tooltip.y - 10,
+              left: Math.min(
+                Math.max(xScale(hoveredPoint.timestamp), 80),
+                Math.max(svgW - 80, 80),
+              ),
+              top: yScale(hoveredPoint.value) - 10,
             }}
           >
             <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-lg">
-              <p className="text-xs font-medium text-muted-foreground">{tooltip.data.label}</p>
-              <p className="mt-1 text-lg font-bold tabular-nums text-foreground">
-                {tooltip.data.value}{" "}
-                <span className="text-sm font-normal text-muted-foreground">mg/dL</span>
+              <p className="text-xs font-medium text-muted-foreground">
+                {new Date(hoveredPoint.timestamp).toLocaleString([], {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </p>
-              {tooltip.data.note && (
-                <p className="mt-0.5 text-xs text-muted-foreground">{tooltip.data.note}</p>
+              <p className="mt-1 text-lg font-bold tabular-nums text-foreground">
+                {hoveredPoint.value}{" "}
+                <span className="text-sm font-normal text-muted-foreground">mg/dL</span>{" "}
+                <span
+                  className="text-xs font-semibold"
+                  style={{
+                    color:
+                      hoveredPoint.value > 180
+                        ? "var(--destructive)"
+                        : hoveredPoint.value < 70
+                          ? "var(--chart-2)"
+                          : "var(--primary)",
+                  }}
+                >
+                  {hoveredPoint.value > 180
+                    ? "High"
+                    : hoveredPoint.value < 70
+                      ? "Low"
+                      : "In range"}
+                </span>
+              </p>
+              {hoveredPoint.note && (
+                <p className="mt-0.5 text-xs text-muted-foreground">{hoveredPoint.note}</p>
+              )}
+              {hoveredMeal && (
+                <p className="mt-1 border-t border-border pt-1 text-xs text-muted-foreground">
+                  🍽️ {hoveredMeal.mealName}
+                  {typeof hoveredMeal.mealCarbs === "number"
+                    ? ` · ${hoveredMeal.mealCarbs}g net carbs`
+                    : ""}
+                </p>
               )}
             </div>
           </div>
