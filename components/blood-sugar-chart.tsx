@@ -106,10 +106,14 @@ export function BloodSugarChart({
   const plotW = Math.max(svgW - pad.left - pad.right, 100)
   const plotH = Math.max(svgH - pad.top - pad.bottom, 50)
 
-  // Scales
-  const allLabels = chartData.map((d) => d.timestamp)
-  const minT = allLabels.length > 0 ? Math.min(...allLabels) : Date.now() - 3600000
-  const maxT = allLabels.length > 0 ? Math.max(...allLabels) : Date.now()
+  // Scales — include meal-marker times so meals always land inside the plot
+  // (a meal logged outside the readings' time span used to be culled off-chart).
+  const scaleTimes = [
+    ...chartData.map((d) => d.timestamp),
+    ...mealMarkers.map((m) => m.timestamp),
+  ]
+  const minT = scaleTimes.length > 0 ? Math.min(...scaleTimes) : Date.now() - 3600000
+  const maxT = scaleTimes.length > 0 ? Math.max(...scaleTimes) : Date.now()
   const tRange = Math.max(maxT - minT, 3600000)
 
   const xScale = (t: number) => pad.left + ((t - minT) / tRange) * plotW
@@ -414,11 +418,16 @@ export function BloodSugarChart({
 }
 
 function parseMealTime(timeStr: string): Date | null {
+  // Modern browsers (Chrome/Edge/Safari with recent ICU) format AM/PM with a
+  // narrow no-break space (U+202F) or no-break space (U+00A0) — not a regular
+  // space — so a plain split(" ") used to produce "22\u202fPM" and NaN minutes,
+  // yielding an Invalid Date that silently rendered nothing on the chart.
+  const normalized = timeStr.replace(/[\u00a0\u202f]/g, " ").trim()
   const now = new Date()
-  const [time, period] = timeStr.split(" ")
+  const [time, period] = normalized.split(" ")
   if (!time) return null
   const [h, m] = time.split(":").map(Number)
-  if (h === undefined || m === undefined) return null
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
   let hours = h
   if (period?.toLowerCase() === "pm" && hours !== 12) hours += 12
   if (period?.toLowerCase() === "am" && hours === 12) hours = 0

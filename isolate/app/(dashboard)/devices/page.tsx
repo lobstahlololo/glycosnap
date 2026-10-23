@@ -13,7 +13,7 @@ export default function DevicesPage() {
       <PageHeader
         eyebrow="Device Sync"
         title="Connect your CGM or meter"
-        description="Import readings from Dexcom, FreeStyle Libre, Eversense, Accu-Chek, OneTouch, or any generic CSV. CSV import is fully working today — OAuth partner credentials are required for live connections."
+        description="Import readings from Dexcom, FreeStyle Libre, Eversense, Accu-Chek, OneTouch, or any generic CSV."
       />
       <DashboardBar
         state={bar.state}

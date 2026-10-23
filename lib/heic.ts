@@ -31,7 +31,7 @@ export const IMAGE_ACCEPT = HEIC_CONVERSION_ENABLED
 
 /** Shown when a HEIC file reaches the analyzer while the flag is off. */
 export const HEIC_REJECTION_MESSAGE =
-  "HEIC photos aren't supported yet — convert it to JPG first (see the iPhone tips below), then select it again."
+  "HEIC photos aren't supported yet — convert it to JPG first, then select it again."
 
 /**
  * Convert a HEIC/HEIF file to a JPEG File in the browser.

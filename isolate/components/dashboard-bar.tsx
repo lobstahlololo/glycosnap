@@ -20,7 +20,14 @@ export type PersistedUI = {
 
 export type PersistedState = {
   profile: UserProfile
-  gamification: { points: number; unlockedBadges: string[] }
+  gamification: {
+    points: number
+    unlockedBadges: string[]
+    /** Date key (YYYY-MM-DD) the once-per-day streak bonus was last granted. */
+    lastStreakBonusDate?: string
+    /** Date key (YYYY-MM-DD) the once-per-day insight points were last granted. */
+    lastInsightDate?: string
+  }
   onboarded: boolean
   ui: PersistedUI
 }

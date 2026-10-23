@@ -201,27 +201,6 @@ export function MealAnalyzer({
         )}
       </div>
 
-      <details className="mt-3 rounded-xl border border-border/60 bg-secondary/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-        <summary className="cursor-pointer select-none font-medium text-foreground/80 hover:text-foreground">
-          iPhone users — your photos are saved as HEIC by default
-        </summary>
-        <p className="mt-2">
-          <strong className="text-foreground/90">Make all future photos JPGs:</strong> go to{" "}
-          <span className="font-mono text-[11px] text-foreground/80">Settings &gt; Camera &gt; Formats</span> and select{" "}
-          <span className="font-mono text-[11px] text-foreground/80">Most Compatible</span>.
-        </p>
-        <p className="mt-1.5">
-          <strong className="text-foreground/90">Convert existing photos:</strong> copy a photo into the{" "}
-          <span className="font-mono text-[11px] text-foreground/80">Files</span> app, long-press it, then use{" "}
-          <span className="font-mono text-[11px] text-foreground/80">Quick Actions &gt; Convert Image &gt; JPEG</span>.
-          You can also build a custom 1-tap conversion script using the built-in{" "}
-          <span className="font-mono text-[11px] text-foreground/80">Shortcuts</span> app linked to your Share Sheet.
-        </p>
-        <p className="mt-1.5">
-          <strong className="text-foreground/90">Or</strong> use an online HEIC-to-JPG converter.
-        </p>
-      </details>
-
       {/* Upload progress bar */}
       {showProgress && (
         <div className="mt-3">

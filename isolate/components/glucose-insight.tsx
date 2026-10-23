@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { Brain, Lightbulb, Loader2, Sparkles } from "lucide-react"
 import { getGlucoseInsightAction, type GlucoseInsight, type BloodSugarReading } from "@/app/actions"
 import type { LoggedMeal } from "@/components/history-log"
+import { useDashboardState } from "@/components/dashboard-state"
 import { cn } from "@/lib/utils"
 
 const CONCERN_STYLES: Record<GlucoseInsight["concern_level"], string> = {
@@ -31,6 +32,7 @@ export function GlucoseInsightSection({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const prevCountRef = useRef(0)
+  const { awardInsightPoints } = useDashboardState()
 
   useEffect(() => {
     // Re-generate insight when a new meal is analyzed or new reading added
@@ -61,12 +63,14 @@ export function GlucoseInsightSection({
     getGlucoseInsightAction(readingData, recentMeals).then((result) => {
       if (result.ok) {
         setInsight(result.data)
+        // +2 insight points — deduped to once per day inside the provider.
+        awardInsightPoints()
       } else {
         setError(result.error)
       }
       setLoading(false)
     })
-  }, [readings, meals, mealCount])
+  }, [readings, meals, mealCount, awardInsightPoints])
 
   if (readings.length === 0 && mealCount === 0) return null
 

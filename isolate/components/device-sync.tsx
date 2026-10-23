@@ -7,11 +7,9 @@ import {
   Watch,
   Wifi,
   Upload,
-  X,
   CheckCircle2,
   AlertCircle,
   Cable,
-  Rocket,
   FileSpreadsheet,
 } from "lucide-react"
 import type { BloodSugarReading } from "@/app/actions"
@@ -84,8 +82,6 @@ export function DeviceSync({
   onImport: (readings: BloodSugarReading[], source: string) => void
 }) {
   const [activeDevice, setActiveDevice] = useState<string | null>(null)
-  const [oauthTarget, setOauthTarget] = useState<string | null>(null)
-  const [oauthMessage, setOauthMessage] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<{
     source: string
     count: number
@@ -115,22 +111,8 @@ export function DeviceSync({
     setActiveDevice(deviceId)
     setImportStatus(null)
     setImportError(null)
-    setOauthMessage(null)
     // Use setTimeout to ensure ref is in the DOM after re-render
     setTimeout(() => inputRef.current?.click(), 0)
-  }
-
-  function applyOauth(deviceId: string) {
-    const device = DEVICES.find((d) => d.id === deviceId)
-    if (!device) return
-    setOauthTarget(deviceId)
-    setImportStatus(null)
-    setImportError(null)
-    // Honest scaffold: real OAuth requires vendor partner credentials.
-    setOauthMessage(
-      `${device.name} OAuth handshake requires partner credentials from ${device.name}.` +
-        ` Until credentials are configured, choose the CSV option above — it works today.`,
-    )
   }
 
   return (
@@ -188,21 +170,6 @@ export function DeviceSync({
             <span>{importError}</span>
           </div>
         )}
-        {oauthMessage && (
-          <div className="mt-4 flex items-start gap-2 rounded-2xl bg-[#f6e8d1] px-4 py-3 text-sm text-[#8a5a1f]">
-            <Rocket className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{oauthMessage}</span>
-            <button
-              type="button"
-              onClick={() => setOauthMessage(null)}
-              className="ml-auto rounded-full p-1 text-[#8a5a1f] hover:bg-[#e6cfa2]"
-              aria-label="Dismiss"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-
         <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {DEVICES.map((d) => (
             <div
@@ -227,15 +194,8 @@ export function DeviceSync({
               <div className="mt-3 flex flex-col gap-1.5">
                 <button
                   type="button"
-                  onClick={() => applyOauth(d.id)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground"
-                >
-                  Connect
-                </button>
-                <button
-                  type="button"
                   onClick={() => triggerCsvUpload(d.id)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-card-foreground transition hover:border-ring hover:bg-secondary"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary hover:text-primary-foreground"
                 >
                   <Upload className="h-3 w-3" aria-hidden="true" />
                   Import CSV
