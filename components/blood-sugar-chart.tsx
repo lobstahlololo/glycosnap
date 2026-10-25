@@ -92,12 +92,10 @@ export function BloodSugarChart({
   const plotW = Math.max(svgW - pad.left - pad.right, 100)
   const plotH = Math.max(svgH - pad.top - pad.bottom, 50)
 
-  // Scales — include meal-marker times so meals always land inside the plot
-  // (a meal logged outside the readings' time span used to be culled off-chart).
-  const scaleTimes = [
-    ...chartData.map((d) => d.timestamp),
-    ...mealMarkers.map((m) => m.timestamp),
-  ]
+  // Scales — readings only. Meal lines are no longer drawn on the chart
+  // (their times always landed at the right edge), so meals no longer
+  // influence the domain.
+  const scaleTimes = chartData.map((d) => d.timestamp)
   const minT = scaleTimes.length > 0 ? Math.min(...scaleTimes) : Date.now() - 3600000
   const maxT = scaleTimes.length > 0 ? Math.max(...scaleTimes) : Date.now()
   const tRange = Math.max(maxT - minT, 3600000)
@@ -313,36 +311,6 @@ export function BloodSugarChart({
               />
             ))}
 
-            {/* Meal markers */}
-            {mealMarkers.map((m, i) => {
-              const x = xScale(m.timestamp)
-              if (x < pad.left || x > pad.left + plotW) return null
-              return (
-                <g key={`meal-${i}`}>
-                  <line
-                    x1={x}
-                    y1={pad.top}
-                    x2={x}
-                    y2={pad.top + plotH}
-                    stroke="var(--chart-3)"
-                    strokeWidth={1.5}
-                    strokeDasharray="3 3"
-                    opacity={0.5}
-                  />
-                  <text
-                    x={x}
-                    y={pad.top - 6}
-                    textAnchor="middle"
-                    fill="var(--chart-3)"
-                    fontSize={10}
-                    fontFamily="inherit"
-                  >
-                    🍽️
-                  </text>
-                </g>
-              )
-            })}
-
             {/* X-axis */}
             <line
               x1={pad.left}
@@ -488,9 +456,6 @@ export function BloodSugarChart({
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-0 w-3 border-0 border-t-2 border-dashed align-middle" style={{ borderTopColor: "var(--chart-5)" }} />
           High alert
-        </span>
-        <span className="flex items-center gap-1.5">
-          🍽️ Meal
         </span>
       </div>
     </div>
