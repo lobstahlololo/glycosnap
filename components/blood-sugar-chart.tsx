@@ -191,7 +191,7 @@ export function BloodSugarChart({
           <h3 className="font-serif text-lg font-semibold text-card-foreground">Glucose Trend</h3>
           <p className="text-xs text-muted-foreground">
             {readings.length} reading{readings.length !== 1 ? "s" : ""} &middot; {meals.length} meal
-            {meals.length !== 1 ? "s" : ""} today
+            {meals.length !== 1 ? "s" : ""} logged
           </p>
         </div>
       </div>

@@ -13,7 +13,7 @@ export function HistoryLog({ meals }: { meals: LoggedMeal[] }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-serif text-xl font-semibold text-card-foreground">
           <History className="h-5 w-5 text-primary" aria-hidden="true" />
-          Today&apos;s History
+          Meal History
         </h2>
         {meals.length > 0 ? (
           <p className="text-sm text-muted-foreground">

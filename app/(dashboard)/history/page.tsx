@@ -12,7 +12,7 @@ export default function HistoryPage() {
     <>
       <PageHeader
         eyebrow="History Log"
-        title="Every meal you&apos;ve logged today"
+        title="Every meal you&apos;ve logged"
         description="A running list of your analyzed meals. Tap the doctor report in the sidebar for a printable summary you can share with your care team."
       />
       <DashboardBar
