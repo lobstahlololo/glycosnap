@@ -4,6 +4,7 @@ import { useMemo, useRef, useEffect, useState } from "react"
 import { Activity } from "lucide-react"
 import type { BloodSugarReading } from "@/app/actions"
 import type { LoggedMeal } from "@/components/history-log"
+import { DIABETES_PROFILES, type DiabetesType } from "@/lib/diabetes-profile"
 
 type ChartPoint = {
   label: string
@@ -18,11 +19,16 @@ type ChartPoint = {
 export function BloodSugarChart({
   readings,
   meals,
+  diabetesType,
 }: {
   readings: BloodSugarReading[]
   meals: LoggedMeal[]
+  diabetesType: DiabetesType
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  // Profile-specific target band — reference lines, shaded region, dot
+  // colors, and hover status all follow the selected diabetes profile.
+  const target = DIABETES_PROFILES[diabetesType].target
   const [dimensions, setDimensions] = useState({ width: 0, height: 260 })
 
   useEffect(() => {
@@ -79,11 +85,11 @@ export function BloodSugarChart({
 
     return {
       chartData: points,
-      yMin: Math.max(40, Math.min(...allValues, 70) - 20),
-      yMax: Math.min(300, Math.max(...allValues, 180) + 30),
+      yMin: Math.max(40, Math.min(...allValues, target.low) - 20),
+      yMax: Math.min(300, Math.max(...allValues, target.high) + 30),
       mealMarkers: meals_pts,
     }
-  }, [readings, meals])
+  }, [readings, meals, target.low, target.high])
 
   // SVG dimensions
   const pad = { top: 20, right: 16, bottom: 32, left: 40 }
@@ -207,9 +213,9 @@ export function BloodSugarChart({
             {/* Target range background */}
             <rect
               x={pad.left}
-              y={yScale(180)}
+              y={yScale(target.high)}
               width={plotW}
-              height={yScale(70) - yScale(180)}
+              height={yScale(target.low) - yScale(target.high)}
               fill="var(--primary)"
               fillOpacity={0.06}
               rx={4}
@@ -241,46 +247,46 @@ export function BloodSugarChart({
             ))}
 
             {/* Reference lines */}
-            {/* Low 70 */}
+            {/* Profile low bound */}
             <line
               x1={pad.left}
-              y1={yScale(70)}
+              y1={yScale(target.low)}
               x2={pad.left + plotW}
-              y2={yScale(70)}
+              y2={yScale(target.low)}
               stroke="var(--chart-2)"
               strokeWidth={1.5}
               strokeDasharray="4 4"
             />
             <text
               x={pad.left + plotW - 4}
-              y={yScale(70) - 4}
+              y={yScale(target.low) - 4}
               textAnchor="end"
               fill="var(--chart-2)"
               fontSize={10}
               fontFamily="inherit"
             >
-              Low 70
+              Low {target.low}
             </text>
 
-            {/* High 180 */}
+            {/* Profile high bound */}
             <line
               x1={pad.left}
-              y1={yScale(180)}
+              y1={yScale(target.high)}
               x2={pad.left + plotW}
-              y2={yScale(180)}
+              y2={yScale(target.high)}
               stroke="var(--chart-5)"
               strokeWidth={1.5}
               strokeDasharray="4 4"
             />
             <text
               x={pad.left + plotW - 4}
-              y={yScale(180) - 4}
+              y={yScale(target.high) - 4}
               textAnchor="end"
               fill="var(--chart-5)"
               fontSize={10}
               fontFamily="inherit"
             >
-              High 180
+              High {target.high}
             </text>
 
             {/* Area fill */}
@@ -305,7 +311,7 @@ export function BloodSugarChart({
                 cx={xScale(p.timestamp)}
                 cy={yScale(p.value)}
                 r={hoverIndex === i ? 7 : 5}
-                fill={p.value > 180 ? "var(--destructive)" : "var(--primary)"}
+                fill={p.value > target.high ? "var(--destructive)" : "var(--primary)"}
                 stroke="var(--card)"
                 strokeWidth={2}
               />
@@ -409,16 +415,16 @@ export function BloodSugarChart({
                   className="text-xs font-semibold"
                   style={{
                     color:
-                      hoveredPoint.value > 180
+                      hoveredPoint.value > target.high
                         ? "var(--destructive)"
-                        : hoveredPoint.value < 70
+                        : hoveredPoint.value < target.low
                           ? "var(--chart-2)"
                           : "var(--primary)",
                   }}
                 >
-                  {hoveredPoint.value > 180
+                  {hoveredPoint.value > target.high
                     ? "High"
-                    : hoveredPoint.value < 70
+                    : hoveredPoint.value < target.low
                       ? "Low"
                       : "In range"}
                 </span>
@@ -443,7 +449,7 @@ export function BloodSugarChart({
       <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="h-3 w-5 rounded-sm bg-primary/10" />
-          Target range 70–180
+          Target range {target.low}–{target.high}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-5 rounded-full bg-primary" />

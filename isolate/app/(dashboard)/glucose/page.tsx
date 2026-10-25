@@ -8,7 +8,7 @@ import { BloodSugarInput } from "@/components/blood-sugar-input"
 import { PageHeader } from "@/components/page-header"
 
 export default function GlucosePage() {
-  const { logs, handleBloodSugarAdd } = useDashboardState()
+  const { logs, handleBloodSugarAdd, persisted } = useDashboardState()
   const bar = useDashboardBarBindings()
   const hasReadings = logs.readings.length > 0
 
@@ -29,7 +29,11 @@ export default function GlucosePage() {
       <div className="mx-auto grid max-w-5xl gap-8 px-4 pt-6 pb-10 lg:grid-cols-2">
         <BloodSugarInput onAdd={handleBloodSugarAdd} />
         {hasReadings ? (
-          <BloodSugarChart readings={logs.readings} meals={logs.meals} />
+          <BloodSugarChart
+            readings={logs.readings}
+            meals={logs.meals}
+            diabetesType={persisted.profile.diabetesType}
+          />
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-border bg-card/50 p-10 text-center">
             <HeartPulse className="h-8 w-8 text-primary/40" aria-hidden="true" />
